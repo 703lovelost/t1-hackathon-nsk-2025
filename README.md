@@ -42,6 +42,10 @@ python3 ...
 
 ## Run
 
+### Web interface
+
+To run the web interface:
+
 ```
-python3 ...
+python3 -m http.server [PORT]
 ```
