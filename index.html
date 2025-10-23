@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <title>Camera test</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+  <link rel="stylesheet" href="./styles/styles.css" />
+</head>
+<body>
+  <header class="container">
+    Camera test.
+  </header>
+
+  <main class="container">
+    <section class="controls">
+      <label>
+        Camera:
+        <select id="cameraSelect" disabled></select>
+      </label>
+      <div class="buttons">
+        <button id="startBtn">Run</button>
+        <button id="stopBtn" disabled>Stop</button>
+      </div>
+      <div class="status">
+        <span id="status">Статус: готов</span>
+        <span class="metric" id="fps">FPS: - fps</span>
+        <span class="metric" id="fpsAvg">FPSAvg: - fps</span>
+        <span class="metric" id="cpuNow">CPU: -%</span>
+        <span class="metric" id="cpuAvg">CPUAvg: -%</span>
+        <span class="metric" id="gpuNow">GPU: -%</span>
+        <span class="metric" id="gpuAvg">GPUAvg: -%</span>
+      </div>
+    </section>
+
+    <section class="panes">
+      <div class="pane">
+        <h2>Raw video</h2>
+        <video id="video" playsinline muted autoplay></video>
+      </div>
+      <div class="pane">
+        <h2>Post-processing</h2>
+        <canvas id="canvas" width="1024" height="1080"></canvas>
+      </div>
+    </section>
+
+    <button id="settingsBtn" class="settings-btn" type="button">Настройки</button>
+
+    <!-- Простой pop-up -->
+    <div id="settingsPopup" class="popup" hidden>
+      <div class="popup__panel" role="dialog" aria-modal="true" aria-labelledby="popupTitle">
+        <div class="popup__header">
+          <h3 id="popupTitle">Настройки</h3>
+          <button id="popupCloseBtn" class="popup__close" aria-label="Закрыть">×</button>
+        </div>
+        <div class="popup__body">
+          Тест
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgpu@4"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@4"></script>
+  <script src="./scripts/app.js"></script>
+
+</body>
+</html>
