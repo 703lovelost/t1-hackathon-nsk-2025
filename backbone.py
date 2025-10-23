@@ -1,54 +1,21 @@
 import cv2
-import time
-import signal
 from queue import Empty, Full
 import multiprocessing as mp
 from multiprocessing import Process, Queue, Event
-from dataclasses import dataclass, field
 
-@dataclass
-class Config:
-    video_source: int = 0
-    max_input_queue_size: int = 1
-    worker_configs: list = field(default_factory=lambda: [
-        {"worker_id": "worker1", "fps": 5.0, "model_path": "model1.pth"},
-        {"worker_id": "worker2", "fps": 2.0, "model_path": "model2.pth"},
-    ])
-    # add more config options as needed (frame resize, capture throttle, etc.)
+import numpy as np
+from torchvision.transforms import ToPILImage
 
-class SegmentModel:
-    def __init__(self, model_path=None):
-        self.model_path = model_path
-        # load your actual model here if needed
-        # e.g., self.model = load_model(model_path)
-        print(f"[SegmentModel] Loaded model from {model_path}")
+from segment_models import SegmentModel, YoloModel
 
-    def process_frame(self, frame):
-        """
-        Override this method in subclasses.
-        Input: frame (numpy array).
-        Output: processed_frame (numpy array).
-        """
-        return frame
-
-class MySegmentModel(SegmentModel):
-    def __init__(self, model_path=None):
-        super().__init__(model_path)
-        # additional initialization if needed
-
-    def process_frame(self, frame):
-        # Example processing: convert to grayscale then back to BGR
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        processed = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
-        return processed
 
 class FrameProcessor(Process):
     def __init__(
             self,
             input_queue: Queue,
             result_queue: Queue,
-            stop_event: Event,
-            model: SegmentModel,
+            stop_event,
+            model_weight: str,
             worker_id: str,
             fps: float,
             mean_process_time: float = 0.0,
@@ -57,150 +24,134 @@ class FrameProcessor(Process):
         self.input_queue = input_queue
         self.result_queue = result_queue
         self.stop_event = stop_event
-        self.model = model
+        self.model_weight = model_weight
         self.worker_id = worker_id
         self.fps = fps
         self.mean_process_time = mean_process_time
         self.period = 1.0 / fps if fps > 0 else 0.0
-        self.perion = self.period - mean_process_time if mean_process_time < self.period else 0
+        self.period = self.period - mean_process_time if mean_process_time < self.period else 0
 
     def run(self):
+        model = YoloModel(self.model_weight)
         print(f"[{self.worker_id}] Starting (PID={mp.current_process().pid})", flush=True)
-        try:
-            while True:
-                # Check stop signal
-                if self.stop_event.is_set():
-                    print(f"[{self.worker_id}] Stop event set — exiting loop", flush=True)
+        while True:
+            try:
+                frame = self.input_queue.get(block=False)
+                frame_num = frame[0]
+                frame = frame[1]
+                predicted = model.process_frame(frame)
+                self.result_queue.put((self.worker_id, frame_num, predicted), False)
+
+            except Empty:
+                pass
+            except Full:
+                pass
+            if self.stop_event.is_set():
                     break
 
-                try:
-                    item = self.input_queue.get(block=False)
-                except Empty:
-                    # Timeout, loop again (and check stop_event)
-                    continue
+def apply_mask(image, mask, colored_mask, alpha=0.3):
+    """
+    Применение цветной маски к изображению
 
-                if item is None:
-                    # Sentinel received
-                    print(f"[{self.worker_id}] Received sentinel — exiting", flush=True)
-                    break
+    Args:
+        image: исходное изображение
+        mask: бинарная маска
+        colored_mask: цветная маска
+        alpha: прозрачность маски
 
-                frame_index, frame = item
-                processed = self.model.process_frame(frame)
-                try:
-                    self.result_queue.put((self.worker_id, frame_index, processed), block=False)
-                except Full:
-                    pass
+    Returns:
+        image_with_mask: изображение с примененной маской
+    """
+    # Нормализуем маску
+    mask = cv2.resize(mask, (image.shape[1], image.shape[0]))
+    mask = mask > 0
+    # Применяем маску
+    image_with_mask = image.copy()
+    image_with_mask[mask] = cv2.addWeighted(image, 1 - alpha, colored_mask, alpha, 0)[mask]
+    return image_with_mask
 
-                if self.period > 0:
-                    time.sleep(self.period)
-
-        except KeyboardInterrupt:
-            print(f"[{self.worker_id}] KeyboardInterrupt caught — exiting", flush=True)
-
-        finally:
-            # Signal this worker is done
-            self.result_queue.put((self.worker_id, None, None))
-            print(f"[{self.worker_id}] Exited", flush=True)
-
-def capture_loop(config: Config, input_queue: Queue, res_queue: Queue, stop_event: Event):
-    cap_source = config.video_source
-    maxq = config.max_input_queue_size
+def capture_loop(video_source, input_queue: Queue, res_queue: Queue, stop_event):
+    cap_source = video_source
     print("[Capture] Opening video source:", cap_source, flush=True)
     cap = cv2.VideoCapture(cap_source)
     if not cap.isOpened():
         raise RuntimeError(f"Unable to open video source {cap_source}")
+    to_pil = ToPILImage()
 
+    is_end = False
     frame_idx = 0
     print("[Capture] Starting loop", flush=True)
     try:
         while True:
-            if stop_event.is_set():
-                print("[Capture] Stop event set — exiting capture loop", flush=True)
-                break
-
-            ret, frame = cap.read()
-            if not ret:
-                continue
-
-            if input_queue.qsize() < maxq:
-                input_queue.put((frame_idx, frame))
+            success, orig_frame = cap.read()
+            if success:
+                try:
+                    input_queue.put((frame_idx, orig_frame), False)
+                    frame_idx += 1
+                except Full:
+                    pass
             else:
-                print(f"[Capture] Queue full (size={input_queue.qsize()}) — dropping frame {frame_idx}", flush=True)
-
-            frame_idx += 1
-            # Optionally you might throttle capture
-            # time.sleep(0.001)
+                is_end = True
 
             try:
-                item = res_queue.get(block=False)
-                proc_id, frame_id, frame = item
-                if frame is None:
-                    break
+                curr = res_queue.get(False)
+                proc_id, frame_id, (mask, duration) = curr
+                mask = np.array(to_pil(mask.cpu()))
+                colored_mask = np.zeros_like(orig_frame)
+                colored_mask[:, :] = [0, 255, 0]  # Зеленый цвет
+
+                frame = apply_mask(orig_frame, mask, colored_mask, alpha=0.3)
+                cv2.putText(frame, f"Dur.: {(duration * 1000):.0f}ms", (10, 30),
+                                cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 0), 2)
                 cv2.imshow("Window", frame)
-                key = cv2.waitKey(10)
-                if key == ord("q") or key == 27:
-                    break
             except Empty:
                 pass
-
-
-
+            
+            key = cv2.waitKey(1)
+            if key == ord("q") or key == 27:
+                break
+            if is_end:
+                break
     except KeyboardInterrupt:
         print("[Capture] KeyboardInterrupt caught — exiting capture loop", flush=True)
 
     finally:
+        stop_event.set()
         cap.release()
         print("[Capture] Released video capture device", flush=True)
-        # send sentinel values: one per worker
-        for _ in config.worker_configs:
-            input_queue.put(None)
-        print("[Capture] Sent sentinel values to workers", flush=True)
+        cv2.destroyAllWindows()
+        print("[Capture] Destroyed all windows", flush=True)
 
 def main():
-    config = Config()
     input_queue = Queue(1)
     result_queue = Queue(1)
     stop_event = Event()
 
-    # signal handlers to set stop_event
-    def _signal_handler(signum, frame):
-        print(f"[Main] Received signal {signum} — initiating shutdown", flush=True)
-        stop_event.set()
+    worker_ids = ["w1", "w2"]
+    worker_fps = [5, 10]
+    weights = ["yolo11l-seg.pt", "yolo11l-seg.pt"]
 
-    signal.signal(signal.SIGINT, _signal_handler)
-    signal.signal(signal.SIGTERM, _signal_handler)
-
-    # Instantiate workers
     workers = []
-    for wc in config.worker_configs:
-        model = MySegmentModel(model_path=wc["model_path"])
+    for id, fps, weight in zip(worker_ids, worker_fps, weights):
         w = FrameProcessor(input_queue, result_queue, stop_event,
-                           model, wc["worker_id"], wc["fps"])
+                           weight, id, fps)
         workers.append(w)
 
-    # Start workers
     for w in workers:
         w.start()
     print("[Main] Workers started", flush=True)
 
-    # Run capture loop in main thread
-    capture_loop(config, input_queue, result_queue, stop_event)
+    capture_loop(0, input_queue, result_queue, stop_event)
 
-    # Wait for workers to finish
-    for w in workers:
-        w.join()
-    print("[Main] Workers joined", flush=True)
-
-    # Process result queue
-    print("[Main] Draining result queue", flush=True)
-    while not result_queue.empty():
-        worker_id, frame_idx, processed_frame = result_queue.get()
-        if frame_idx is None:
-            print(f"[Main] {worker_id} signalled done", flush=True)
-        else:
-            print(f"[Main] Got processed frame {frame_idx} from {worker_id}", flush=True)
-            cv2.imshow(f"{worker_id}", processed_frame)
-            cv2.waitKey(20)
+    try:
+        for w in workers:
+            w.join()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        stop_event.set()
+        cv2.destroyAllWindows()
+        print("[Main] Workers joined")
 
     print("[Main] Shutdown complete.", flush=True)
 
