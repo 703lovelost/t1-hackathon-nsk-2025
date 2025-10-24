@@ -1,11 +1,21 @@
 'use strict';
 
+async function canUseWebGPU() {
+  if (!('gpu' in navigator)) return false;
+  try {
+    const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'low-power' });
+    return !!adapter;
+  } catch { return false; }
+}
+
 export async function pickBestBackend() {
   try {
-    await tf.setBackend('webgpu');
-    await tf.ready();
-    if (tf.getBackend() === 'webgpu') return 'webgpu';
-  } catch {}
+    if (await canUseWebGPU()) {
+      await tf.setBackend('webgpu');
+      await tf.ready();
+      if (tf.getBackend() === 'webgpu') return 'webgpu';
+    }
+  } catch {} // тихо откатываемся
 
   try {
     if (typeof tf.setWasmPaths === 'function') {

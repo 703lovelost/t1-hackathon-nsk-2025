@@ -11,14 +11,15 @@ import {
 import { startLoop } from './render.js';
 import { initSegmentation } from './inference_onnx.js';
 
-async function pickOrtBackendPreferIgpu() {
-  if (!('gpu' in navigator)) return 'wasm';
-  try {
-    const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'low-power' });
-    if (adapter) return 'webgpu';
-  } catch {}
-  return 'wasm';
-}
+// Возможно, low-power валит обращение к webgpu. Пока в комментариях.
+
+// async function canUseOrtWebGPU() {
+//   if (!('gpu' in navigator) || !ort?.env?.webgpu) return false;
+//   try {
+//     const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'low-power' });
+//     return !!adapter;
+//   } catch { return false; }
+// }
 
 export async function startCamera() {
   if (!navigator.mediaDevices?.getUserMedia) {
@@ -54,7 +55,8 @@ export async function startCamera() {
     console.log('TF.js backend:', backend);
 
     try {
-      const preferOrt = await pickOrtBackendPreferIgpu(); // 'webgpu' или 'wasm'
+      // const preferOrt = (await canUseOrtWebGPU()) ? 'webgpu' : 'wasm';
+      const preferOrt = (backend === 'webgpu') ? 'webgpu' : 'wasm'; // строгая проверка без power-preference
       await initSegmentation({ modelUrl: './models/best.onnx', preferBackend: preferOrt });
       console.log('ONNX session ready:', preferOrt);
     } catch (e) {
