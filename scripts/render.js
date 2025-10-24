@@ -8,55 +8,12 @@ import {
 } from './state.js';
 import { avg, fmtNum, clamp01, pushSample } from './utils.js';
 import { gpuProbe } from './gpu.js';
-import { enqueueSegmentation, getOverlayBitmap, getProbBitmap, hasModel } from './inference_onnx.js';
+import { enqueueSegmentation, getOverlayBitmap, hasModel } from './inference_onnx.js';
 
-const INFER_EVERY = 2;       // инференс маски раз в 2 кадра
+const INFER_EVERY = 2;       // инференс маски раз в 2 кадра (под iGPU можно 3–4)
 const GPU_PROBE_EVERY = 10;  // реже пробуем GPU, чтобы не мешать рендеру
 
 let lastGpuProbeAt = 0;
-let maskCanvas, maskCtx;
-
-// Создаём мини-панель для отдельного вывода «карты вероятностей»
-function ensureMaskCanvas() {
-  if (maskCanvas) return;
-  const wrapper = document.createElement('div');
-  Object.assign(wrapper.style, {
-    position: 'fixed',
-    right: '16px',
-    bottom: '16px',
-    background: 'rgba(0,0,0,0.6)',
-    border: '1px solid rgba(255,255,255,0.15)',
-    borderRadius: '12px',
-    padding: '8px',
-    zIndex: 9999,
-    backdropFilter: 'blur(6px)',
-  });
-
-  const title = document.createElement('div');
-  title.textContent = 'Model output (prob)';
-  Object.assign(title.style, {
-    fontSize: '12px',
-    color: '#d9e1ee',
-    margin: '0 0 6px',
-    opacity: 0.8,
-  });
-
-  maskCanvas = document.createElement('canvas');
-  maskCanvas.width = 320;
-  maskCanvas.height = 180; // 16:9 по умолчанию, масштабируем дальше
-  Object.assign(maskCanvas.style, {
-    display: 'block',
-    width: '320px',
-    height: '180px',
-    borderRadius: '8px',
-    background: '#000',
-  });
-  maskCtx = maskCanvas.getContext('2d', { alpha: false });
-
-  wrapper.appendChild(title);
-  wrapper.appendChild(maskCanvas);
-  document.body.appendChild(wrapper);
-}
 
 // одинаковая геометрия с препроцессингом: letterbox + зеркалирование
 function drawLetterboxed(ctx, src, dstW, dstH, mirror) {
@@ -83,7 +40,7 @@ function drawLetterboxed(ctx, src, dstW, dstH, mirror) {
 export function startLoop() {
   const hasRVFC = 'requestVideoFrameCallback' in HTMLVideoElement.prototype;
   const ctx = els.canvas.getContext('2d', { alpha: false });
-  ensureMaskCanvas();
+  const maskCtx = els.maskCanvas.getContext('2d', { alpha: false });
 
   const render = async () => {
     if (!running) return;
@@ -96,6 +53,9 @@ export function startLoop() {
       const vh = els.video.videoHeight || 480;
       if (els.canvas.width !== vw || els.canvas.height !== vh) {
         els.canvas.width = vw; els.canvas.height = vh;
+      }
+      if (els.maskCanvas.width !== vw || els.maskCanvas.height !== vh) {
+        els.maskCanvas.width = vw; els.maskCanvas.height = vh;
       }
 
       // 1) Рисуем видео letterbox'ом + зеркалим (как в препроцессинге)
@@ -112,28 +72,22 @@ export function startLoop() {
         ctx.globalCompositeOperation = 'source-over';
         ctx.globalAlpha = 1;
         ctx.drawImage(overlay, 0, 0, els.canvas.width, els.canvas.height);
-      }
 
-      // 4) Отдельный вывод «карты вероятностей» модели
-      const prob = getProbBitmap();
-      if (prob && maskCtx) {
-        // подгоняем мини-канвас под соотношение сторон карты
-        const mw = prob.width;
-        const mh = prob.height;
-        const targetW = 320;
-        const targetH = Math.round(targetW * (mh / mw));
-        if (maskCanvas.width !== targetW || maskCanvas.height !== targetH) {
-          maskCanvas.width = targetW;
-          maskCanvas.height = targetH;
-          maskCanvas.style.width = `${targetW}px`;
-          maskCanvas.style.height = `${targetH}px`;
-        }
+        // 3a) Отдельный "видеопоток" выхода модели — рисуем ту же маску отдельно
+        maskCtx.save();
         maskCtx.globalCompositeOperation = 'source-over';
         maskCtx.globalAlpha = 1;
-        maskCtx.drawImage(prob, 0, 0, maskCanvas.width, maskCanvas.height);
+        // чёрный фон, чтобы маска читалась
+        maskCtx.fillStyle = '#000';
+        maskCtx.fillRect(0, 0, els.maskCanvas.width, els.maskCanvas.height);
+        maskCtx.drawImage(overlay, 0, 0, els.maskCanvas.width, els.maskCanvas.height);
+        maskCtx.restore();
+      } else {
+        // пока маски нет — просто чистим отдельный холст
+        maskCtx.clearRect(0, 0, els.maskCanvas.width, els.maskCanvas.height);
       }
 
-      // 5) Неблокирующая оценка GPU utilization
+      // 4) Неблокирующая оценка GPU utilization
       const now = performance.now();
       const dtMs = now - lastTs;
 
@@ -150,7 +104,7 @@ export function startLoop() {
         }).catch(()=>{});
       }
 
-      // 6) FPS/CPU метрики
+      // 5) FPS/CPU метрики
       const afterDraw = performance.now();
       const dt = afterDraw - lastTs;
       const busy = afterDraw - frameStart;

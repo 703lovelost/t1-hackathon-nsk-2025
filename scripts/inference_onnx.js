@@ -1,6 +1,8 @@
 // scripts/inference_onnx.js
 'use strict';
 
+import { els } from './dom.js';
+
 const SIZE = 640;
 
 // ---- ГЛОБАЛЬНАЯ ССЫЛКА НА onnxruntime-web (видна всем функциям модуля) ----
@@ -13,8 +15,7 @@ function getORT() {
 // Состояние
 let session = null;
 let inFlight = false;
-let lastOverlayBitmap = null;  // зелёная инвертированная маска для наложения
-let lastProbBitmap = null;     // отдельная «карта вероятностей» (градации серого)
+let lastOverlayBitmap = null;
 let canvasW = SIZE, canvasH = SIZE;
 
 let preprocessCanvas = null;
@@ -25,8 +26,10 @@ let inputName = null;
 let outputName = null;
 
 let chwBuffer = null;              // Float32 [1,3,H,W]
-let rgbaBuffer = null;             // Uint8Clamped [H*W*4] для зелёной маски
-let rgbaProbBuffer = null;         // Uint8Clamped [H*W*4] для серой карты вероятностей
+let rgbaBuffer = null;             // Uint8Clamped [H*W*4]
+let previewRGBA = null;            // Uint8Clamped [H*W*4] для <img>
+
+let lastMaskUrl = null;            // objectURL для <img id="maskImg">
 
 // Тюнинги под датасет
 const USE_LETTERBOX = true;
@@ -71,10 +74,9 @@ export async function initSegmentation({ modelUrl, preferBackend = 'webgpu' } = 
   inputName = session.inputNames[0];
   outputName = session.outputNames[0];
 
-  const plane = canvasH * canvasW;
-  chwBuffer = new Float32Array(1 * 3 * plane);
-  rgbaBuffer = new Uint8ClampedArray(plane * 4);
-  rgbaProbBuffer = new Uint8ClampedArray(plane * 4);
+  chwBuffer = new Float32Array(1 * 3 * canvasH * canvasW);
+  rgbaBuffer = new Uint8ClampedArray(canvasH * canvasW * 4);
+  previewRGBA = new Uint8ClampedArray(canvasH * canvasW * 4);
 
   // тёплый прогон
   const dummy = new ns.Tensor('float32', chwBuffer, [1, 3, canvasH, canvasW]);
@@ -90,7 +92,6 @@ export function enqueueSegmentation(videoEl, { mirror = true } = {}) {
 }
 
 export function getOverlayBitmap() { return lastOverlayBitmap; }
-export function getProbBitmap() { return lastProbBitmap; } // <— отдаём отдельное изображение карты вероятностей
 
 // --- утилиты ---
 function sigmoid(x) { return 1 / (1 + Math.exp(-x)); }
@@ -204,59 +205,61 @@ async function runOnce(videoEl, { mirror }) {
     flat = buf;
   }
 
-  // 6) активация/порог/ИНВЕРСИЯ (зелёный хромакей по фону) + отдельная «probability map»
+  // 6) активация/порог/ИНВЕРСИЯ (зелёный хромакей по фону) + подготовка превью
   let min = +Infinity, max = -Infinity, ones = 0;
   for (let i = 0; i < flat.length; i++) {
     let v = flat[i];
     if (APPLY_SIGMOID) v = sigmoid(v);
     min = Math.min(min, v); max = Math.max(max, v);
-
-    // бинаризация + инверсия для зелёной маски
     const bin = v > 0.5 ? 1 : 0;
-    const inv = 1 - bin;
+    const inv = 1 - bin; // инверсия
 
-    // запись зелёной маски
+    // зелёный overlay
     const j = i * 4;
     rgbaBuffer[j+0] = 0;
     rgbaBuffer[j+1] = inv ? 255 : 0;
     rgbaBuffer[j+2] = 0;
     rgbaBuffer[j+3] = inv ? 160 : 0;
-    if (inv) ones++;
 
-    // запись карты вероятностей (градации серого 0..255, непрозрачная)
-    const g = Math.max(0, Math.min(255, Math.round(v * 255)));
-    rgbaProbBuffer[j+0] = g;
-    rgbaProbBuffer[j+1] = g;
-    rgbaProbBuffer[j+2] = g;
-    rgbaProbBuffer[j+3] = 255;
+    // превью для <img>: белый = 255 для inv, чёрный = 0
+    const g = inv ? 255 : 0;
+    previewRGBA[j+0] = g;
+    previewRGBA[j+1] = g;
+    previewRGBA[j+2] = g;
+    previewRGBA[j+3] = 255;
+
+    if (inv) ones++;
   }
   if (Math.random() < 0.1) {
     console.log(`[mask] min=${min.toFixed(3)} max=${max.toFixed(3)} green(inv)%=${(100*ones/flat.length).toFixed(1)}`);
   }
 
-  // 7) bitmaps для вывода
+  // 7a) bitmap для наложения на основной canvas
   const overlayImageData = new ImageData(rgbaBuffer, canvasW, canvasH);
-  const probImageData = new ImageData(rgbaProbBuffer, canvasW, canvasH);
-
-  let overlaySourceCanvas, probSourceCanvas;
-  try {
-    overlaySourceCanvas = new OffscreenCanvas(canvasW, canvasH);
-    probSourceCanvas = new OffscreenCanvas(canvasW, canvasH);
-  } catch {
+  let overlaySourceCanvas;
+  try { overlaySourceCanvas = new OffscreenCanvas(canvasW, canvasH); }
+  catch {
     overlaySourceCanvas = document.createElement('canvas');
-    overlaySourceCanvas.width = canvasW; overlaySourceCanvas.height = canvasH;
-    probSourceCanvas = document.createElement('canvas');
-    probSourceCanvas.width = canvasW; probSourceCanvas.height = canvasH;
+    overlaySourceCanvas.width = canvasW;
+    overlaySourceCanvas.height = canvasH;
   }
-
   const octx = overlaySourceCanvas.getContext('2d');
   octx.putImageData(overlayImageData, 0, 0);
-  const pctx = probSourceCanvas.getContext('2d');
-  pctx.putImageData(probImageData, 0, 0);
 
   if (lastOverlayBitmap) { try { lastOverlayBitmap.close?.(); } catch {} }
-  if (lastProbBitmap) { try { lastProbBitmap.close?.(); } catch {} }
-
   lastOverlayBitmap = await createImageBitmap(overlaySourceCanvas);
-  lastProbBitmap = await createImageBitmap(probSourceCanvas);
+
+  // 7b) превью в <img> (objectURL PNG)
+  const prevCanvas = document.createElement('canvas');
+  prevCanvas.width = canvasW;
+  prevCanvas.height = canvasH;
+  const pctx = prevCanvas.getContext('2d');
+  pctx.putImageData(new ImageData(previewRGBA, canvasW, canvasH), 0, 0);
+
+  prevCanvas.toBlob(blob => {
+    if (!blob) return;
+    if (lastMaskUrl) URL.revokeObjectURL(lastMaskUrl);
+    lastMaskUrl = URL.createObjectURL(blob);
+    if (els.maskImg) els.maskImg.src = lastMaskUrl;
+  }, 'image/png');
 }

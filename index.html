@@ -1,3 +1,4 @@
+<!-- index.html -->
 <!doctype html>
 <html lang="ru">
 <head>
@@ -38,19 +39,25 @@
         <h2>Сырой видеопоток</h2>
         <video id="video" playsinline muted autoplay></video>
       </div>
+
       <div class="pane">
-        <h2>Постпроцесс</h2>
+        <h2>Постпроцесс (видео + маска)</h2>
         <canvas id="canvas" width="1024" height="1080"></canvas>
+      </div>
+
+      <div class="pane">
+        <h2>Выход модели (маска)</h2>
+        <canvas id="maskCanvas" width="1024" height="1080"></canvas>
       </div>
     </section>
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgpu@4"></script>
-  
-  <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.19.2/dist/ort.webgpu.min.js"></script>
-  
-  <script type="module" src="./scripts/init.js"></script>
 
+  <!-- UMD-сборка ORT с WebGPU: создаёт globalThis.ort -->
+  <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.19.2/dist/ort.webgpu.min.js"></script>
+
+  <script type="module" src="./scripts/init.js"></script>
 </body>
 </html>

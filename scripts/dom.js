@@ -1,8 +1,10 @@
+// scripts/dom.js
 'use strict';
 
 export const els = {
   video: document.getElementById('video'),
   canvas: document.getElementById('canvas'),
+  maskCanvas: document.getElementById('maskCanvas'),
   camSelect: document.getElementById('cameraSelect'),
   startBtn: document.getElementById('startBtn'),
   stopBtn: document.getElementById('stopBtn'),

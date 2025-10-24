@@ -1,3 +1,4 @@
+/* styles/styles.css */
 :root {
   --bg: #0b0f14;
   --card: #121826;
@@ -53,7 +54,7 @@ button:disabled { opacity: 0.6; cursor: not-allowed; }
 .panes {
   margin-top: 16px;
   display: grid;
-  grid-template-columns: minmax(520px, 1fr) minmax(520px, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
   gap: 20px;
 }
 .pane {
