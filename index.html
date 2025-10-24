@@ -9,18 +9,18 @@
 </head>
 <body>
   <header class="container">
-    Camera test.
+    Тест камеры.
   </header>
 
   <main class="container">
     <section class="controls">
       <label>
-        Camera:
+        Камера:
         <select id="cameraSelect" disabled></select>
       </label>
       <div class="buttons">
-        <button id="startBtn">Run</button>
-        <button id="stopBtn" disabled>Stop</button>
+        <button id="startBtn">Запустить</button>
+        <button id="stopBtn" disabled>Остановить</button>
       </div>
       <div class="status">
         <span id="status">Статус: готов</span>
@@ -35,35 +35,30 @@
 
     <section class="panes">
       <div class="pane">
-        <h2>Raw video</h2>
+        <h2>Сырой видеопоток</h2>
         <video id="video" playsinline muted autoplay></video>
       </div>
       <div class="pane">
-        <h2>Post-processing</h2>
+        <h2>Постпроцесс</h2>
         <canvas id="canvas" width="1024" height="1080"></canvas>
       </div>
     </section>
-
-    <button id="settingsBtn" class="settings-btn" type="button">Настройки</button>
-
-    <!-- Простой pop-up -->
-    <div id="settingsPopup" class="popup" hidden>
-      <div class="popup__panel" role="dialog" aria-modal="true" aria-labelledby="popupTitle">
-        <div class="popup__header">
-          <h3 id="popupTitle">Настройки</h3>
-          <button id="popupCloseBtn" class="popup__close" aria-label="Закрыть">×</button>
-        </div>
-        <div class="popup__body">
-          Тест
-        </div>
-      </div>
-    </div>
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgpu@4"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@4"></script>
-  <script src="./scripts/app.js"></script>
+  
+  <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.19.2/dist/ort.min.js"></script>
+
+  <script>
+    if (window.ort && ort.env && ort.env.wasm) {
+      ort.env.wasm.numThreads = Math.min(4, navigator.hardwareConcurrency || 4);
+      ort.env.wasm.simd = true;
+    }
+  </script>
+  
+  <script type="module" src="./scripts/init.js"></script>
 
 </body>
 </html>
