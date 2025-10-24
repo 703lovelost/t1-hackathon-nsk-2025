@@ -53,7 +53,7 @@ export async function initSegmentation({ modelUrl, preferBackend = 'webgpu' } = 
   }
   const sessOpts = { executionProviders: ['webgpu'] };
   session = await ORT.InferenceSession.create(modelUrl, sessOpts);
-  console.log('ORT EP picked:', session.executionProvider);
+  console.log('ORT EP picked:', session?.executionProvider ?? 'webgpu (requested)');
 
   inputName = session.inputNames[0];
   outputName = session.outputNames[0];
@@ -149,11 +149,14 @@ async function runOnce(videoEl, { mirror }) {
     chwBuffer[(C2 === 0 ? R : (C2 === 1 ? G : B)) + px] = b;
   }
 
-  const input = new ort.Tensor('float32', chwBuffer, [1, 3, canvasH, canvasW]);
+  const input = new ORT.Tensor('float32', chwBuffer, [1, 3, canvasH, canvasW]);
 
   // 4) инференс
+  const t0 = performance.now();
   const out = await session.run({ [inputName]: input });
   const tensor = out[outputName];
+  const inferMs = performance.now() - t0;
+  console.debug(`[onnx] run ok: ${inferMs.toFixed(1)} ms, dims=${tensor.dims?.join('×')}, type=${tensor.type ?? 'float32'}`);
 
   // 5) приводим к плоскости [H*W], учитывая возможные оси
   let flat = null, dims = tensor.dims, buf = tensor.data;
@@ -193,8 +196,8 @@ async function runOnce(videoEl, { mirror }) {
     if (APPLY_SIGMOID) v = sigmoid(v);
     min = Math.min(min, v); max = Math.max(max, v);
     const bin = v > 0.5 ? 1 : 0;
-    // const inv = 1 - bin; // инверсия
-    const inv = bin;
+    const inv = 1 - bin;
+    // const inv = bin;
     if (inv) ones++;
     const j = i * 4;
     rgbaBuffer[j+0] = 0;
