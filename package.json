@@ -1,0 +1,21 @@
+{
+    "name": "tfjs-camera-ts",
+    "version": "1.0.0",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "dev": "vite",
+        "build": "vite build",
+        "preview": "vite preview"
+    },
+    "dependencies": {
+        "@tensorflow/tfjs": "^4.22.0",
+        "@tensorflow/tfjs-backend-wasm": "^4.22.0",
+        "@tensorflow/tfjs-backend-webgpu": "^4.22.0",
+        "onnxruntime-web": "^1.23.0"
+    },
+    "devDependencies": {
+        "typescript": "^5.6.3",
+        "vite": "^5.4.10"
+    }
+}
