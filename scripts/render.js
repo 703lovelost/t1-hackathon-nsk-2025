@@ -15,6 +15,38 @@ const GPU_PROBE_EVERY = 10;  // реже пробуем GPU, чтобы не м�
 
 let lastGpuProbeAt = 0;
 
+// Создаём панель и canvas для маски, если их нет в DOM (устраняет TypeError по maskCanvas)
+function ensureMaskCanvas() {
+  if (els.maskCanvas && els.maskCanvas.getContext) return els.maskCanvas;
+
+  const panes = document.querySelector('.panes');
+  if (!panes) return null;
+
+  const pane = document.createElement('div');
+  pane.className = 'pane';
+
+  const h2 = document.createElement('h2');
+  h2.textContent = 'Выход модели (маска)';
+
+  const canvas = document.createElement('canvas');
+  canvas.id = 'maskCanvas';
+  canvas.width = 1024;
+  canvas.height = 1080;
+  canvas.style.width = '100%';
+  canvas.style.height = 'auto';
+  canvas.style.background = '#000';
+  canvas.style.borderRadius = '12px';
+  canvas.style.aspectRatio = '16 / 9';
+
+  pane.appendChild(h2);
+  pane.appendChild(canvas);
+  panes.appendChild(pane);
+
+  // сохранить ссылку в общем объекте элементов
+  els.maskCanvas = canvas;
+  return canvas;
+}
+
 // одинаковая геометрия с препроцессингом: letterbox + зеркалирование
 function drawLetterboxed(ctx, src, dstW, dstH, mirror) {
   const iw = src.videoWidth || 640;
@@ -40,7 +72,10 @@ function drawLetterboxed(ctx, src, dstW, dstH, mirror) {
 export function startLoop() {
   const hasRVFC = 'requestVideoFrameCallback' in HTMLVideoElement.prototype;
   const ctx = els.canvas.getContext('2d', { alpha: false });
-  const maskCtx = els.maskCanvas.getContext('2d', { alpha: false });
+
+  // гарантируем наличие maskCanvas перед первым кадром
+  const maskCanvas = ensureMaskCanvas();
+  const maskCtx = maskCanvas ? maskCanvas.getContext('2d', { alpha: false }) : null;
 
   const render = async () => {
     if (!running) return;
@@ -54,8 +89,8 @@ export function startLoop() {
       if (els.canvas.width !== vw || els.canvas.height !== vh) {
         els.canvas.width = vw; els.canvas.height = vh;
       }
-      if (els.maskCanvas.width !== vw || els.maskCanvas.height !== vh) {
-        els.maskCanvas.width = vw; els.maskCanvas.height = vh;
+      if (maskCanvas && (maskCanvas.width !== vw || maskCanvas.height !== vh)) {
+        maskCanvas.width = vw; maskCanvas.height = vh;
       }
 
       // 1) Рисуем видео letterbox'ом + зеркалим (как в препроцессинге)
@@ -66,25 +101,24 @@ export function startLoop() {
         enqueueSegmentation(els.video, { mirror: true });
       }
 
-      // 3) Наложение зелёной инвертированной маски поверх видео
+      // 3) Наложение зелёной инвертированной маски поверх видео + отдельный вывод маски
       const overlay = getOverlayBitmap();
       if (overlay) {
         ctx.globalCompositeOperation = 'source-over';
         ctx.globalAlpha = 1;
         ctx.drawImage(overlay, 0, 0, els.canvas.width, els.canvas.height);
 
-        // 3a) Отдельный "видеопоток" выхода модели — рисуем ту же маску отдельно
-        maskCtx.save();
-        maskCtx.globalCompositeOperation = 'source-over';
-        maskCtx.globalAlpha = 1;
-        // чёрный фон, чтобы маска читалась
-        maskCtx.fillStyle = '#000';
-        maskCtx.fillRect(0, 0, els.maskCanvas.width, els.maskCanvas.height);
-        maskCtx.drawImage(overlay, 0, 0, els.maskCanvas.width, els.maskCanvas.height);
-        maskCtx.restore();
-      } else {
-        // пока маски нет — просто чистим отдельный холст
-        maskCtx.clearRect(0, 0, els.maskCanvas.width, els.maskCanvas.height);
+        if (maskCtx) {
+          maskCtx.save();
+          maskCtx.globalCompositeOperation = 'source-over';
+          maskCtx.globalAlpha = 1;
+          maskCtx.fillStyle = '#000';
+          maskCtx.fillRect(0, 0, maskCanvas.width, maskCanvas.height);
+          maskCtx.drawImage(overlay, 0, 0, maskCanvas.width, maskCanvas.height);
+          maskCtx.restore();
+        }
+      } else if (maskCtx) {
+        maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
       }
 
       // 4) Неблокирующая оценка GPU utilization
