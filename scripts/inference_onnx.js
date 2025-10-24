@@ -1,8 +1,6 @@
 // scripts/inference_onnx.js
 'use strict';
 
-import { els } from './dom.js';
-
 const SIZE = 640;
 
 // ---- ГЛОБАЛЬНАЯ ССЫЛКА НА onnxruntime-web (видна всем функциям модуля) ----
@@ -12,8 +10,13 @@ function getORT() {
   return ORT;
 }
 
+// Режим работы сегментатора: 'onnx' (ORT WebGPU) или 'tfjs'
+let MODE = 'onnx';
+let INPUT_LAYOUT = null; // 'NCHW' | 'NHWC' (определяется автоматически при первом успешном прогоне)
+
 // Состояние
-let session = null;
+let session = null;       // ORT session
+let tfModel = null;       // TFJS GraphModel (альтернатива)
 let inFlight = false;
 let lastOverlayBitmap = null;
 let canvasW = SIZE, canvasH = SIZE;
@@ -21,15 +24,13 @@ let canvasW = SIZE, canvasH = SIZE;
 let preprocessCanvas = null;
 let preprocessCtx = null;
 
-let prefer = 'webgpu';
+let prefer = 'webgpu-onnx';
 let inputName = null;
 let outputName = null;
 
-let chwBuffer = null;              // Float32 [1,3,H,W]
-let rgbaBuffer = null;             // Uint8Clamped [H*W*4]
-let previewRGBA = null;            // Uint8Clamped [H*W*4] для <img>
-
-let lastMaskUrl = null;            // objectURL для <img id="maskImg">
+let chwBuffer = null;   // Float32 [1,3,H,W] (плоско)
+let hwcBuffer = null;   // Float32 [1,H,W,3] (плоско)
+let rgbaBuffer = null;  // Uint8Clamped [H*W*4]
 
 // Тюнинги под датасет
 const USE_LETTERBOX = true;
@@ -56,37 +57,85 @@ export function setModelInputCanvasSize(w, h) {
   makePreprocessCanvas(w, h);
 }
 
-export function hasModel() { return !!session; }
+export function hasModel() { return MODE === 'onnx' ? !!session : !!tfModel; }
 
-export async function initSegmentation({ modelUrl, preferBackend = 'webgpu' } = {}) {
+export async function initSegmentation({ modelUrl, preferBackend = 'webgpu-onnx' } = {}) {
   prefer = preferBackend;
+  MODE = (String(preferBackend).toLowerCase().includes('tfjs')) ? 'tfjs' : 'onnx';
   makePreprocessCanvas(canvasW, canvasH);
 
-  const ns = getORT();
-  if (!('gpu' in navigator) || !ns?.env?.webgpu) {
-    throw new Error('WebGPU is not available.');
-  }
-
-  const sessOpts = { executionProviders: ['webgpu'] };
-  session = await ns.InferenceSession.create(modelUrl, sessOpts);
-  console.log('ORT EP picked:', session?.executionProvider ?? 'webgpu (requested)');
-
-  inputName = session.inputNames[0];
-  outputName = session.outputNames[0];
-
+  // Буферы под вход и выход
   chwBuffer = new Float32Array(1 * 3 * canvasH * canvasW);
+  hwcBuffer = new Float32Array(1 * canvasH * canvasW * 3);
   rgbaBuffer = new Uint8ClampedArray(canvasH * canvasW * 4);
-  previewRGBA = new Uint8ClampedArray(canvasH * canvasW * 4);
 
-  // тёплый прогон
-  const dummy = new ns.Tensor('float32', chwBuffer, [1, 3, canvasH, canvasW]);
-  await session.run({ [inputName]: dummy });
+  if (MODE === 'onnx') {
+    const ns = getORT();
+    if (!('gpu' in navigator) || !ns?.env?.webgpu) {
+      throw new Error('WebGPU is not available for ORT.');
+    }
+
+    const sessOpts = { executionProviders: ['webgpu'] };
+    session = await ns.InferenceSession.create(modelUrl, sessOpts);
+    console.log('ORT EP picked:', session?.executionProvider ?? 'webgpu (requested)');
+
+    inputName = session.inputNames[0];
+    outputName = session.outputNames[0];
+
+    // тёплый прогон — одновременно определим раскладку входа
+    await warmupAndDetectLayout();
+  } else {
+    // TFJS GraphModel (например, экспорт YOLOv11m-seg в TFJS)
+    tfModel = await tf.loadGraphModel(modelUrl);
+    // тёплый прогон
+    await tf.tidy(() => {
+      const dummy = tf.zeros([1, canvasH, canvasW, 3], 'float32');
+      const out = tfModel.executeAsync ? tfModel.executeAsync(dummy) : tfModel.execute(dummy);
+      // обрабатываем промис, чтобы реально выполнить граф
+      if (out instanceof Promise) return out.then(xs => (Array.isArray(xs) ? xs.forEach(t => t.dispose?.()) : xs.dispose?.()));
+      (Array.isArray(out) ? out.forEach(t => t.dispose?.()) : out.dispose?.());
+    });
+  }
+}
+
+async function warmupAndDetectLayout() {
+  // Подготовим оба буфера и попробуем сначала NCHW, затем NHWC.
+  // Заполним нулями — это неважно для shape-чека.
+  chwBuffer.fill(0);
+  hwcBuffer.fill(0);
+
+  const ns = getORT();
+  const tryNCHW = async () => {
+    const t = new ns.Tensor('float32', chwBuffer, [1, 3, canvasH, canvasW]);
+    const o = await session.run({ [inputName]: t });
+    disposeOrtOutputs(o);
+    INPUT_LAYOUT = 'NCHW';
+  };
+  const tryNHWC = async () => {
+    const t = new ns.Tensor('float32', hwcBuffer, [1, canvasH, canvasW, 3]);
+    const o = await session.run({ [inputName]: t });
+    disposeOrtOutputs(o);
+    INPUT_LAYOUT = 'NHWC';
+  };
+
+  try {
+    await tryNCHW();
+  } catch (e1) {
+    console.warn('[onnx] NCHW warmup failed, retry NHWC', e1);
+    await tryNHWC();
+  }
+  console.log('[onnx] input layout detected:', INPUT_LAYOUT);
+}
+
+function disposeOrtOutputs(out) {
+  // ORT JS отдаёт plain объекты с TypedArray; обычно диспоуз не требуется
+  // оставлено на будущее, если появится handle
 }
 
 export function enqueueSegmentation(videoEl, { mirror = true } = {}) {
-  if (!session || inFlight) return;
+  if ((MODE === 'onnx' && !session) || (MODE === 'tfjs' && !tfModel) || inFlight) return;
   inFlight = true;
-  runOnce(videoEl, { mirror })
+  (MODE === 'onnx' ? runOnceORT(videoEl, { mirror }) : runOnceTFJS(videoEl, { mirror }))
     .catch(console.error)
     .finally(() => { inFlight = false; });
 }
@@ -118,15 +167,44 @@ function letterboxDraw(ctx, src, dstW, dstH, mirror) {
     ctx.drawImage(src, dx, dy, nw, nh);
   }
   ctx.restore();
-  return { dx, dy, nw, nh };
 }
 
-async function runOnce(videoEl, { mirror }) {
-  const ns = getORT();
-  if (!ns) {
-    console.warn('[onnx] ORT namespace not available');
-    return;
+function fillInputBuffersFromRGBA(data, plane) {
+  // Заполняем одновременно CHW и HWC (одним проходом)
+  const mean0 = mean[0], mean1 = mean[1], mean2 = mean[2];
+  const std0  = std[0],  std1  = std[1],  std2  = std[2];
+
+  const Roff = 0 * plane, Goff = 1 * plane, Boff = 2 * plane;
+
+  for (let i = 0, px = 0; px < plane; px++, i += 4) {
+    let r = data[i + 0] / (NORM_01 ? 255 : 1);
+    let g = data[i + 1] / (NORM_01 ? 255 : 1);
+    let b = data[i + 2] / (NORM_01 ? 255 : 1);
+
+    r = (r - mean0) / std0;
+    g = (g - mean1) / std1;
+    b = (b - mean2) / std2;
+
+    // CHW (возможен BGR порядок каналов)
+    const C0 = CHANNELS_BGR ? 2 : 0;
+    const C1 = 1;
+    const C2 = CHANNELS_BGR ? 0 : 2;
+    const idx0 = (C0 === 0 ? Roff : (C0 === 1 ? Goff : Boff)) + px;
+    const idx1 = (C1 === 0 ? Roff : (C1 === 1 ? Goff : Boff)) + px;
+    const idx2 = (C2 === 0 ? Roff : (C2 === 1 ? Goff : Boff)) + px;
+    chwBuffer[idx0] = r; chwBuffer[idx1] = g; chwBuffer[idx2] = b;
+
+    // HWC (RGB всегда; если нужна BGR — переставим ниже при создании тензора)
+    const j = px * 3;
+    hwcBuffer[j + 0] = r;
+    hwcBuffer[j + 1] = g;
+    hwcBuffer[j + 2] = b;
   }
+}
+
+async function runOnceORT(videoEl, { mirror }) {
+  const ns = getORT();
+  if (!ns) return;
 
   makePreprocessCanvas(canvasW, canvasH);
 
@@ -141,100 +219,162 @@ async function runOnce(videoEl, { mirror }) {
     preprocessCtx.restore();
   }
 
-  // 2) забираем RGBA
+  // 2) RGBA -> оба буфера (CHW и HWC)
   const img = preprocessCtx.getImageData(0, 0, canvasW, canvasH);
   const data = img.data;
   const plane = canvasW * canvasH;
+  fillInputBuffersFromRGBA(data, plane);
 
-  // 3) HWC->CHW + нормализации
-  const C0 = CHANNELS_BGR ? 2 : 0;
-  const C1 = 1;
-  const C2 = CHANNELS_BGR ? 0 : 2;
+  // 3) инференс (с авто-выбором раскладки один раз)
+  let tensor = null, out = null;
+  const t0 = performance.now();
+  try {
+    if (INPUT_LAYOUT === 'NHWC') {
+      tensor = new ns.Tensor('float32', hwcBuffer, [1, canvasH, canvasW, 3]);
+    } else { // по умолчанию пробуем NCHW
+      tensor = new ns.Tensor('float32', chwBuffer, [1, 3, canvasH, canvasW]);
+    }
+    out = await session.run({ [inputName]: tensor });
+  } catch (e) {
+    if (INPUT_LAYOUT == null) {
+      // Первая попытка не удалась — пробуем другую раскладку
+      try {
+        tensor = new ns.Tensor('float32', hwcBuffer, [1, canvasH, canvasW, 3]);
+        out = await session.run({ [inputName]: tensor });
+        INPUT_LAYOUT = 'NHWC';
+        console.log('[onnx] switched to NHWC');
+      } catch (e2) {
+        console.error('[onnx] run failed for both layouts', e, e2);
+        return;
+      }
+    } else {
+      console.error('[onnx] run failed', e);
+      return;
+    }
+  }
+  if (INPUT_LAYOUT == null) INPUT_LAYOUT = 'NCHW';
+  const inferMs = performance.now() - t0;
 
-  const mean0 = mean[0], mean1 = mean[1], mean2 = mean[2];
-  const std0  = std[0],  std1  = std[1],  std2  = std[2];
+  // 4) постпроцесс выхода в flat[H*W]
+  const outTensor = out[outputName];
+  const flat = toFlatHW(outTensor);
+  console.debug(`[onnx] run ok: ${inferMs.toFixed(1)} ms, dims=${outTensor.dims?.join('×')}`);
 
-  const R = 0 * plane, G = 1 * plane, B = 2 * plane;
+  // 5) порог + инверсия → RGBA
+  applyThresholdToRGBA(flat);
 
-  for (let i = 0, px = 0; px < plane; px++, i += 4) {
-    let r = data[i + 0] / (NORM_01 ? 255 : 1);
-    let g = data[i + 1] / (NORM_01 ? 255 : 1);
-    let b = data[i + 2] / (NORM_01 ? 255 : 1);
+  // 6) bitmap для наложения
+  await buildOverlayBitmap();
+}
 
-    r = (r - mean0) / std0;
-    g = (g - mean1) / std1;
-    b = (b - mean2) / std2;
+async function runOnceTFJS(videoEl, { mirror }) {
+  makePreprocessCanvas(canvasW, canvasH);
 
-    chwBuffer[(C0 === 0 ? R : (C0 === 1 ? G : B)) + px] = r;
-    chwBuffer[(C1 === 0 ? R : (C1 === 1 ? G : B)) + px] = g;
-    chwBuffer[(C2 === 0 ? R : (C2 === 1 ? G : B)) + px] = b;
+  // 1) letterbox/resize в препроцесс canvas
+  if (USE_LETTERBOX) {
+    letterboxDraw(preprocessCtx, videoEl, canvasW, canvasH, mirror);
+  } else {
+    preprocessCtx.save();
+    preprocessCtx.clearRect(0, 0, canvasW, canvasH);
+    mirror ? preprocessCtx.setTransform(-1,0,0,1,canvasW,0) : preprocessCtx.setTransform(1,0,0,1,0,0);
+    preprocessCtx.drawImage(videoEl, 0, 0, canvasW, canvasH);
+    preprocessCtx.restore();
   }
 
-  // 4) инференс
-  const input = new ns.Tensor('float32', chwBuffer, [1, 3, canvasH, canvasW]);
-  const t0 = performance.now();
-  const out = await session.run({ [inputName]: input });
-  const tensor = out[outputName];
-  const inferMs = performance.now() - t0;
-  console.debug(`[onnx] run ok: ${inferMs.toFixed(1)} ms, dims=${tensor.dims?.join('×')}, type=${tensor.type ?? 'float32'}`);
+  // 2) RGBA -> HWC
+  const img = preprocessCtx.getImageData(0, 0, canvasW, canvasH);
+  const data = img.data;
+  const plane = canvasW * canvasH;
+  fillInputBuffersFromRGBA(data, plane);
 
-  // 5) приводим к плоскости [H*W], учитывая возможные оси
-  let flat = null, dims = tensor.dims, buf = tensor.data;
+  // 3) инференс TFJS (ожидаем [1,H,W,3] → [1,H,W,1] или совместимые)
+  let flat = null;
+  await tf.tidy(async () => {
+    let input4d = tf.tensor4d(hwcBuffer, [1, canvasH, canvasW, 3], 'float32');
+    const t0 = performance.now();
+    const out = tfModel.executeAsync ? await tfModel.executeAsync(input4d) : tfModel.execute(input4d);
+    const y = Array.isArray(out) ? out[0] : out;
+    const inferMs = performance.now() - t0;
+    console.debug(`[tfjs] run ok: ${inferMs.toFixed(1)} ms, shape=${y.shape?.join('×')}`);
+
+    // Приводим к [H,W]
+    if (y.rank === 4 && y.shape[0] === 1 && y.shape[3] === 1) {
+      flat = (await y.data());
+    } else if (y.rank === 3 && y.shape[0] === 1) {
+      flat = (await y.data());
+    } else {
+      // Попытка свести к первой карте
+      const y0 = y.squeeze(); // [H,W] или [H,W,C]
+      const y1 = y0.rank === 3 ? y0.slice([0,0,0],[y0.shape[0], y0.shape[1], 1]).squeeze() : y0;
+      flat = await y1.data();
+    }
+  });
+
+  // 4) порог + инверсия → RGBA
+  applyThresholdToRGBA(flat);
+
+  // 5) bitmap для наложения
+  await buildOverlayBitmap();
+}
+
+function toFlatHW(tensor) {
+  const buf = tensor.data, dims = tensor.dims || [];
   if (dims.length === 4) { // [N,C,H,W] или [N,H,W,C]
     const [N,A,B,C] = dims;
     if (A === 1) {         // [1,1,H,W]
-      flat = buf;
+      return buf;
     } else if (C === 1) {  // [1,H,W,1] (NHWC)
       const H = B, W = C;
-      flat = new Float32Array(H * W);
+      const flat = new Float32Array(H * W);
       for (let y = 0; y < H; y++) {
         for (let x = 0; x < W; x++) {
-          flat[y*W + x] = buf[(0*H + y)*W*1 + x]; // NHWC
+          flat[y*W + x] = buf[(0*H + y)*W*1 + x];
         }
       }
+      return flat;
     } else {
       // допустим NCHW и берём C0
       const H = B, W = C;
       const stride = H * W;
-      flat = new Float32Array(stride);
+      const flat = new Float32Array(stride);
       for (let i = 0; i < stride; i++) flat[i] = buf[i];
+      return flat;
     }
   } else if (dims.length === 3) { // [1,H,W]
-    flat = buf;
-  } else { // [H,W]
-    flat = buf;
+    return buf;
+  } else { // [H,W] или неизвестно — возвращаем как есть
+    return buf;
   }
+}
 
-  // 6) активация/порог/ИНВЕРСИЯ (зелёный хромакей по фону) + подготовка превью
-  let min = +Infinity, max = -Infinity, ones = 0;
+function applyThresholdToRGBA(flat) {
+  // динамический порог: если min/max сильно сжаты, берём середину диапазона
+  let min = +Infinity, max = -Infinity;
   for (let i = 0; i < flat.length; i++) {
-    let v = flat[i];
-    if (APPLY_SIGMOID) v = sigmoid(v);
-    min = Math.min(min, v); max = Math.max(max, v);
-    const bin = v > 0.5 ? 1 : 0;
-    const inv = 1 - bin; // инверсия
+    const v = APPLY_SIGMOID ? sigmoid(flat[i]) : flat[i];
+    if (v < min) min = v;
+    if (v > max) max = v;
+  }
+  const th = (max - min > 1e-6) ? 0.5 * (min + max) : 0.5;
 
-    // зелёный overlay
+  let ones = 0;
+  for (let i = 0; i < flat.length; i++) {
+    let v = APPLY_SIGMOID ? sigmoid(flat[i]) : flat[i];
+    const bin = v > th ? 1 : 0;
+    const inv = 1 - bin; // инверсия: фон зелёный, объект прозрачен
+    if (inv) ones++;
     const j = i * 4;
     rgbaBuffer[j+0] = 0;
     rgbaBuffer[j+1] = inv ? 255 : 0;
     rgbaBuffer[j+2] = 0;
     rgbaBuffer[j+3] = inv ? 160 : 0;
-
-    // превью для <img>: белый = 255 для inv, чёрный = 0
-    const g = inv ? 255 : 0;
-    previewRGBA[j+0] = g;
-    previewRGBA[j+1] = g;
-    previewRGBA[j+2] = g;
-    previewRGBA[j+3] = 255;
-
-    if (inv) ones++;
   }
-  if (Math.random() < 0.1) {
-    console.log(`[mask] min=${min.toFixed(3)} max=${max.toFixed(3)} green(inv)%=${(100*ones/flat.length).toFixed(1)}`);
+  if (Math.random() < 0.15) {
+    console.log(`[mask] min=${min.toFixed(3)} max=${max.toFixed(3)} th=${th.toFixed(3)} green(inv)%=${(100*ones/flat.length).toFixed(1)}`);
   }
+}
 
-  // 7a) bitmap для наложения на основной canvas
+async function buildOverlayBitmap() {
   const overlayImageData = new ImageData(rgbaBuffer, canvasW, canvasH);
   let overlaySourceCanvas;
   try { overlaySourceCanvas = new OffscreenCanvas(canvasW, canvasH); }
@@ -248,18 +388,4 @@ async function runOnce(videoEl, { mirror }) {
 
   if (lastOverlayBitmap) { try { lastOverlayBitmap.close?.(); } catch {} }
   lastOverlayBitmap = await createImageBitmap(overlaySourceCanvas);
-
-  // 7b) превью в <img> (objectURL PNG)
-  const prevCanvas = document.createElement('canvas');
-  prevCanvas.width = canvasW;
-  prevCanvas.height = canvasH;
-  const pctx = prevCanvas.getContext('2d');
-  pctx.putImageData(new ImageData(previewRGBA, canvasW, canvasH), 0, 0);
-
-  prevCanvas.toBlob(blob => {
-    if (!blob) return;
-    if (lastMaskUrl) URL.revokeObjectURL(lastMaskUrl);
-    lastMaskUrl = URL.createObjectURL(blob);
-    if (els.maskImg) els.maskImg.src = lastMaskUrl;
-  }, 'image/png');
 }
