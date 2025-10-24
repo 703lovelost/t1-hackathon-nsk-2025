@@ -13,6 +13,16 @@ async function init() {
 
   window.addEventListener('pagehide', stopCamera);
   window.addEventListener('beforeunload', stopCamera);
+
+  window.debugORT = () => {
+  const out = {
+    hasGlobal: !!globalThis.ort,
+    hasWebGPU: 'gpu' in navigator,
+    ortWebGPUFlag: !!globalThis.ort?.env?.webgpu,
+  };
+  console.table(out);
+  return out;
+};
 }
 
 init();

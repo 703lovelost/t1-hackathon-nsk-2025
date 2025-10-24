@@ -57,7 +57,7 @@ export async function startCamera() {
     try {
       // const preferOrt = (await canUseOrtWebGPU()) ? 'webgpu' : 'wasm';
       await initSegmentation({ modelUrl: './models/best.onnx', preferBackend: 'webgpu' });
-      console.log('ONNX session ready:', preferOrt);
+      console.log('ONNX session ready: webgpu');
     } catch (e) {
       console.warn('ONNX init failed:', e);
       setStatus('WebGPU для ONNX недоступен (маска выключена)', 'warn');
