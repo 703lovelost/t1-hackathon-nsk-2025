@@ -5,7 +5,7 @@ import { clamp01 } from './utils.js';
 
 export async function gpuProbe(dtMs) {
   const b = tf.getBackend();
-  if (!['webgpu','webgl','wasm'].includes(b)) return null;
+  if (!['webgpu','webgl'].includes(b)) return null;
   try {
     const res = await tf.time(() => tf.tidy(() => {
       let t = tf.browser.fromPixels(els.video);

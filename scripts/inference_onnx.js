@@ -47,11 +47,10 @@ export async function initSegmentation({ modelUrl, preferBackend = 'webgpu' } = 
   prefer = preferBackend;
   makePreprocessCanvas(canvasW, canvasH);
 
-  const epList = (prefer === 'webgpu' && ort?.env?.webgpu)
-  ? ['webgpu', 'wasm']
-  : ['wasm'];
-
-  const sessOpts = { executionProviders: epList };
+  if (!('gpu' in navigator) || !ort?.env?.webgpu) {
+    throw new Error('WebGPU is not available.');
+  }
+  const sessOpts = { executionProviders: ['webgpu'] };
   session = await ort.InferenceSession.create(modelUrl, sessOpts);
   console.log('ORT EP picked:', session.executionProvider ?? epList[0]);
 

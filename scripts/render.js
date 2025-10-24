@@ -9,15 +9,37 @@ import { avg, fmtNum, clamp01, pushSample } from './utils.js';
 import { gpuProbe } from './gpu.js';
 import { enqueueSegmentation, getOverlayBitmap } from './inference_onnx.js';
 
-const INFER_EVERY = 2;
+const INFER_EVERY = 2;       // инференс маски раз в 2 кадра (под iGPU можно 3–4)
+const GPU_PROBE_EVERY = 10;  // реже пробуем GPU, чтобы не мешать рендеру
 
-const GPU_PROBE_EVERY = 15;
 let lastGpuProbeAt = 0;
+
+// одинаковая геометрия с препроцессингом: letterbox + зеркалирование
+function drawLetterboxed(ctx, src, dstW, dstH, mirror) {
+  const iw = src.videoWidth || 640;
+  const ih = src.videoHeight || 480;
+  const r  = Math.min(dstW / iw, dstH / ih);
+  const nw = Math.round(iw * r);
+  const nh = Math.round(ih * r);
+  const dx = Math.floor((dstW - nw) / 2);
+  const dy = Math.floor((dstH - nh) / 2);
+
+  ctx.save();
+  ctx.clearRect(0, 0, dstW, dstH);
+  if (mirror) {
+    ctx.setTransform(-1, 0, 0, 1, dstW, 0);
+    // NB: при зеркале сдвиг остаётся таким же — матрица трансформации всё «перевернёт»
+    ctx.drawImage(src, dx, dy, nw, nh);
+  } else {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(src, dx, dy, nw, nh);
+  }
+  ctx.restore();
+}
 
 export function startLoop() {
   const hasRVFC = 'requestVideoFrameCallback' in HTMLVideoElement.prototype;
   const ctx = els.canvas.getContext('2d', { alpha: false });
-  const GPU_PROBE_EVERY = 10;
 
   const render = async () => {
     if (!running) return;
@@ -25,28 +47,30 @@ export function startLoop() {
     const frameStart = performance.now();
 
     if (els.video.readyState >= 2) {
+      // Синхронизация размеров canvas с входным видео (1:1), UI масштабируется CSS'ом
       const vw = els.video.videoWidth  || 640;
       const vh = els.video.videoHeight || 480;
       if (els.canvas.width !== vw || els.canvas.height !== vh) {
         els.canvas.width = vw; els.canvas.height = vh;
       }
 
-      // зеркалим
-      ctx.save();
-      ctx.setTransform(-1, 0, 0, 1, els.canvas.width, 0);
-      ctx.drawImage(els.video, 0, 0, els.canvas.width, els.canvas.height);
-      ctx.restore();
+      // 1) Рисуем видео letterbox'ом + зеркалим (как в препроцессинге)
+      drawLetterboxed(ctx, els.video, els.canvas.width, els.canvas.height, true);
 
+      // 2) Фоновый инференс сегментации каждые N кадров (fire-and-forget)
       if ((fpsSamples.length % INFER_EVERY) === 0) {
         enqueueSegmentation(els.video, { mirror: true });
       }
 
+      // 3) Наложение зелёной инвертированной маски (готовый ImageBitmap 640x640)
       const overlay = getOverlayBitmap();
       if (overlay) {
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.globalAlpha = 1;
         ctx.drawImage(overlay, 0, 0, els.canvas.width, els.canvas.height);
       }
 
-      let gpuUtilNow = null;
+      // 4) Неблокирующая оценка GPU utilization
       const now = performance.now();
       const dtMs = now - lastTs;
 
@@ -63,7 +87,7 @@ export function startLoop() {
         }).catch(()=>{});
       }
 
-      // FPS/CPU
+      // 5) FPS/CPU метрики
       const afterDraw = performance.now();
       const dt = afterDraw - lastTs;
       const busy = afterDraw - frameStart;
@@ -78,9 +102,6 @@ export function startLoop() {
       els.cpuNow.textContent = `CPU: ${fmtNum(cpu)}%`;
       els.cpuAvg.textContent = `CPUAvg: ${fmtNum(avg(cpuSamples))}%`;
 
-      if (gpuUtilNow != null) {
-        els.gpuNow.textContent = `GPU: ${fmtNum(gpuUtilNow)}%`;
-      }
       const gAvg = avg(gpuSamples);
       els.gpuAvg.textContent = `GPUAvg: ${Number.isFinite(gAvg) ? fmtNum(gAvg) + '%' : '-%'}`;
 
