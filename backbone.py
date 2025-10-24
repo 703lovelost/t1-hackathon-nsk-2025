@@ -129,7 +129,7 @@ def main():
 
     worker_ids = ["w1", "w2"]
     worker_fps = [5, 10]
-    weights = ["yolo11l-seg.pt", "yolo11l-seg.pt"]
+    weights = ["yolo11m-seg.pt", "yolo11m-seg.pt"]
 
     workers = []
     for id, fps, weight in zip(worker_ids, worker_fps, weights):
