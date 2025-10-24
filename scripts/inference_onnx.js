@@ -21,8 +21,8 @@ let prefer = 'webgpu';
 let inputName = null;
 let outputName = null;
 
-let chwBuffer = null;
-let rgbaBuffer = null;
+let chwBuffer = null;              // Float32 [1,3,H,W]
+let rgbaBuffer = null;             // Uint8Clamped [H*W*4]
 
 // Тюнинги под датасет
 const USE_LETTERBOX = true;
@@ -84,6 +84,7 @@ export function enqueueSegmentation(videoEl, { mirror = true } = {}) {
 
 export function getOverlayBitmap() { return lastOverlayBitmap; }
 
+// --- утилиты ---
 function sigmoid(x) { return 1 / (1 + Math.exp(-x)); }
 
 function letterboxDraw(ctx, src, dstW, dstH, mirror) {
@@ -108,6 +109,7 @@ function letterboxDraw(ctx, src, dstW, dstH, mirror) {
     ctx.drawImage(src, dx, dy, nw, nh);
   }
   ctx.restore();
+
   return { dx, dy, nw, nh };
 }
 
@@ -121,12 +123,15 @@ async function runOnce(videoEl, { mirror }) {
   makePreprocessCanvas(canvasW, canvasH);
 
   // 1) letterbox/resize в препроцесс canvas
-  USE_LETTERBOX
-    ? letterboxDraw(preprocessCtx, videoEl, canvasW, canvasH, mirror)
-    : (preprocessCtx.save(), preprocessCtx.clearRect(0,0,canvasW,canvasH),
-       mirror ? preprocessCtx.setTransform(-1,0,0,1,canvasW,0) : preprocessCtx.setTransform(1,0,0,1,0,0),
-       preprocessCtx.drawImage(videoEl, 0, 0, canvasW, canvasH),
-       preprocessCtx.restore());
+  if (USE_LETTERBOX) {
+    letterboxDraw(preprocessCtx, videoEl, canvasW, canvasH, mirror);
+  } else {
+    preprocessCtx.save();
+    preprocessCtx.clearRect(0, 0, canvasW, canvasH);
+    mirror ? preprocessCtx.setTransform(-1,0,0,1,canvasW,0) : preprocessCtx.setTransform(1,0,0,1,0,0);
+    preprocessCtx.drawImage(videoEl, 0, 0, canvasW, canvasH);
+    preprocessCtx.restore();
+  }
 
   // 2) забираем RGBA
   const img = preprocessCtx.getImageData(0, 0, canvasW, canvasH);
@@ -176,7 +181,7 @@ async function runOnce(videoEl, { mirror }) {
       flat = new Float32Array(H * W);
       for (let y = 0; y < H; y++) {
         for (let x = 0; x < W; x++) {
-          flat[y*W + x] = buf[(0*H + y)*W*1 + x]; // NHWC, берём единственный канал
+          flat[y*W + x] = buf[(0*H + y)*W*1 + x]; // NHWC
         }
       }
     } else {
@@ -192,14 +197,14 @@ async function runOnce(videoEl, { mirror }) {
     flat = buf;
   }
 
-  // 6) активация/порог/инверсия (зелёный хромакей по фону)
+  // 6) активация/порог/ИНВЕРСИЯ (зелёный хромакей по фону)
   let min = +Infinity, max = -Infinity, ones = 0;
   for (let i = 0; i < flat.length; i++) {
     let v = flat[i];
     if (APPLY_SIGMOID) v = sigmoid(v);
     min = Math.min(min, v); max = Math.max(max, v);
     const bin = v > 0.5 ? 1 : 0;
-    const inv = 1 - bin;
+    const inv = 1 - bin; // инверсия
     if (inv) ones++;
     const j = i * 4;
     rgbaBuffer[j+0] = 0;
