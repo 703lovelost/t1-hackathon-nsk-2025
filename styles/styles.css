@@ -1,74 +1,749 @@
 :root {
-  --bg: #0b0f14;
-  --card: #121826;
-  --muted: #93a1b5;
-  --text: #d9e1ee;
-  --accent: #7aa2ff;
-  --ok: #39d98a;
-  --warn: #ffd166;
+    --bg: #0b0f14;
+    --card: #121826;
+    --muted: #93a1b5;
+    --text: #d9e1ee;
+    --accent: #7aa2ff;
+    --ok: #39d98a;
+    --warn: #ffd166;
+    --red: #f24b4b; /* Добавлен красный цвет для зачеркивания */
 }
 
-* { box-sizing: border-box; }
-html, body { height: 100%; }
+* {
+    box-sizing: border-box;
+}
+html,
 body {
-  margin: 0;
-  font: 16px/1.45 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji";
-  color: var(--text);
-  background: radial-gradient(1400px 800px at 70% -10%, #1b2440 0%, var(--bg) 60%);
+    height: 100%;
+}
+body {
+    margin: 0;
+    font:
+        16px/1.45 system-ui,
+        -apple-system,
+        Segoe UI,
+        Roboto,
+        Ubuntu,
+        Cantarell,
+        "Helvetica Neue",
+        Arial,
+        "Noto Sans",
+        "Apple Color Emoji",
+        "Segoe UI Emoji";
+    color: var(--text);
+    background: radial-gradient(
+        1400px 800px at 70% -10%,
+        #1b2440 0%,
+        var(--bg) 60%
+    );
+    display: flex; /* Для центрирования main */
+    flex-direction: column;
 }
 
-.container { max-width: 1500px; margin: 0 auto; padding: 20px; }
-h1 { margin: 10px 0 6px; }
-h2 { margin: 0 0 8px; font-size: 16px; font-weight: 600; color: var(--muted); }
+.container {
+    max-width: 1800px;
+    margin: 0 auto;
+    padding: 20px;
+    width: 100%;
+}
+header.container {
+    padding-bottom: 0;
+    font-size: 1.25rem;
+    font-weight: 600;
+    flex-shrink: 0; /* Не сжимается */
+}
 
-.controls {
-  background: var(--card);
-  border: 1px solid rgba(255,255,255,0.06);
-  padding: 16px;
-  border-radius: 16px;
-  display: grid;
-  gap: 12px;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: center;
+main.container {
+    flex-grow: 1; /* Занимает все доступное пространство */
+    display: flex;
+    flex-direction: column;
+    align-items: center; /* Центрирует содержимое */
+    justify-content: flex-start; /* Начинается сверху */
+    padding-top: 16px;
+    padding-bottom: 0;
 }
-.controls label { display: flex; gap: 8px; align-items: center; }
-select, button {
-  appearance: none;
-  background: #0e1525;
-  color: var(--text);
-  border: 1px solid rgba(255,255,255,0.1);
-  padding: 10px 12px;
-  border-radius: 12px;
-  font-weight: 600;
-  cursor: pointer;
-}
-select:disabled { opacity: 0.6; cursor: not-allowed; }
-button:disabled { opacity: 0.6; cursor: not-allowed; }
 
-.status { display: flex; gap: 14px; justify-content: flex-end; flex-wrap: wrap; }
-.status .metric { color: var(--muted); }
-#status.ok { color: var(--ok); }
-#status.warn { color: var(--warn); }
+select {
+    appearance: none;
+    background: #0e1525;
+    color: var(--text);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 8px 10px;
+    border-radius: 12px;
+    font-weight: 600;
+    cursor: pointer;
+}
+select:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
 
-.panes {
-  margin-top: 16px;
-  display: grid;
-  grid-template-columns: minmax(520px, 1fr) minmax(520px, 1fr);
-  gap: 20px;
+/* --- ОСНОВНАЯ СЕКЦИЯ ВИДЕОКОНФЕРЕНЦИИ --- */
+.video-conference-section {
+    flex-grow: 1; /* Занимает оставшееся место */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    padding: 10px 0;
 }
-.pane {
-  background: var(--card);
-  border: 1px solid rgba(255,255,255,0.06);
-  padding: 12px;
-  border-radius: 16px;
-  display: flex;
-  flex-direction: column;
+
+.main-video-pane {
+    background: var(--card);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    padding: 0;
+    border-radius: 16px;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    max-width: 90vw;
+    max-height: 80vh;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    justify-content: space-between;
+    align-items: center;
+    overflow: hidden;
 }
-video, canvas {
-  width: 100%;
-  height: auto;
-  display: block;
-  background: #000;
-  border-radius: 12px;
-  aspect-ratio: 16 / 9;
+
+.main-video-pane video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    background: #000;
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    transform: scaleX(-1); /* Зеркальное отображение для камеры */
+}
+
+/* Метрики поверх видео */
+.video-metrics {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    background-color: rgba(0, 0, 0, 0.5);
+    padding: 6px 10px;
+    border-radius: 8px;
+    font-size: 0.85em;
+    color: var(--text);
+    z-index: 5;
+    justify-content: flex-start;
+    max-width: calc(100% - 24px);
+}
+.video-metrics .metric {
+    color: var(--muted);
+}
+#status.ok {
+    color: var(--ok);
+}
+#status.warn {
+    color: var(--warn);
+}
+
+/* --- НИЖНЯЯ ПАНЕЛЬ С КНОПКАМИ --- */
+.bottom-controls {
+    position: absolute;
+    bottom: 12px;
+    left: auto;
+    right: auto;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 10;
+    padding: 8px 12px;
+    background-color: rgba(0, 0, 0, 0.5);
+    border-radius: 12px;
+    transform: translateX(-50%);
+    left: 50%;
+    width: min-content;
+    white-space: nowrap;
+}
+
+.center-controls {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+}
+
+/* --- КНОПКА НАСТРОЕК --- */
+.settings-wrapper {
+    position: relative;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    height: 56px;
+}
+#settingsBtn {
+    background-color: var(--card);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 50%;
+    width: 56px;
+    height: 56px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 0;
+    cursor: pointer;
+    outline: none;
+}
+.settings-icon {
+    width: 32px;
+    height: 32px;
+    display: block;
+    filter: invert(69%) sepia(11%) saturate(543%) hue-rotate(180deg)
+        brightness(92%) contrast(89%);
+    transition: filter 0.2s;
+}
+.settings-wrapper:hover .settings-icon {
+    filter: invert(93%) sepia(8%) saturate(260%) hue-rotate(190deg)
+        brightness(96%) contrast(93%);
+}
+.settings-tooltip {
+    visibility: hidden;
+    opacity: 0;
+    background-color: var(--card);
+    color: var(--text);
+    text-align: center;
+    padding: 6px 12px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    position: absolute;
+    z-index: 11;
+    bottom: 120%;
+    left: 50%;
+    transform: translateX(-50%);
+    transition: opacity 0.2s;
+    white-space: nowrap;
+}
+.settings-wrapper:hover .settings-tooltip {
+    visibility: visible;
+    opacity: 1;
+}
+.settings-tooltip::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    margin-left: -5px;
+    border-width: 5px;
+    border-style: solid;
+    border-color: var(--card) transparent transparent transparent;
+}
+
+/* --- КНОПКА ВКЛ/ВЫКЛ КАМЕРЫ --- */
+.toggle-cam-btn {
+    background-color: var(--red);
+    border: none;
+    border-radius: 50%;
+    width: 56px;
+    height: 56px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 0;
+    position: relative;
+    transition: background-color 0.2s;
+    cursor: pointer;
+    outline: none;
+}
+.toggle-cam-btn.is-active {
+    background-color: var(--accent);
+}
+.cam-icon {
+    width: 32px;
+    height: 32px;
+    filter: invert(100%) sepia(100%) saturate(0%) hue-rotate(288deg)
+        brightness(102%) contrast(102%);
+    display: block;
+}
+.cam-cross-out {
+    display: none;
+    position: absolute;
+    width: 70%;
+    height: 3px;
+    background-color: white;
+    transform: rotate(45deg);
+    border-radius: 2px;
+    pointer-events: none;
+}
+.toggle-cam-btn:not(.is-active) .cam-cross-out {
+    display: block;
+}
+
+/* --- МОДАЛЬНОЕ ОКНО --- */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 100;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0, 0, 0, 0.6);
+    align-items: center;
+    justify-content: center;
+}
+.modal[style*="display: flex;"] {
+    display: flex !important;
+}
+
+.modal-content {
+    background-color: var(--card);
+    color: var(--text);
+    padding: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    width: 90%;
+    max-width: 450px;
+    border-radius: 16px;
+    position: relative;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
+    /* === НОВОЕ: Позволяем прокрутку, если контента много === */
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+#closeSettingsBtn {
+    color: var(--muted);
+    position: absolute;
+    top: 5px;
+    right: 15px;
+    font-size: 28px;
+    font-weight: bold;
+}
+#closeSettingsBtn:hover,
+#closeSettingsBtn:focus {
+    color: var(--text);
+    text-decoration: none;
+    cursor: pointer;
+}
+
+/* --- Стили H2 в модальном окне --- */
+.modal-content h2 {
+    margin-top: 0;
+    margin-bottom: 0;
+    color: var(--text);
+    border-bottom: none;
+    padding-bottom: 0;
+    font-size: 1.25rem;
+}
+
+/* --- Табы в модальном окне --- */
+.modal-tabs {
+    display: flex;
+    gap: 4px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    margin: 20px -20px 0 -20px;
+    padding: 0 20px;
+    /* === НОВОЕ: Прилипание табов при скролле === */
+    position: sticky;
+    top: -20px; /* Компенсация padding .modal-content */
+    background: var(--card);
+    z-index: 101;
+}
+.tab-link {
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-size: 1rem;
+    font-weight: 500;
+    padding: 10px 16px;
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+    transform: translateY(1px);
+    transition:
+        color 0.2s,
+        border-color 0.2s;
+}
+.tab-link:hover {
+    color: var(--text);
+}
+.tab-link.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+}
+.modal-tab-content {
+    padding-top: 24px;
+}
+.tab-pane {
+    display: none;
+}
+.tab-pane.active {
+    display: block;
+}
+
+.setting-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    gap: 16px;
+}
+.setting-row label {
+    font-weight: 500;
+    color: var(--muted);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.modal-content select {
+    flex-grow: 1;
+    width: auto;
+    max-width: 70%;
+}
+
+/* === НОВЫЕ СТИЛИ: Элементы управления для бейджа === */
+.setting-input {
+    appearance: none;
+    background: #0e1525;
+    color: var(--text);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 8px 10px;
+    border-radius: 12px;
+    font: inherit;
+    width: 100%;
+}
+.setting-input.hidden {
+    display: none;
+}
+.warning-text {
+    font-size: 0.8rem;
+    color: var(--warn);
+    display: block;
+    margin-top: 4px;
+    min-height: 1em;
+}
+
+hr.divider {
+    border: none;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    margin: 16px 0;
+}
+.setting-group {
+    margin-bottom: 20px;
+}
+.group-label {
+    display: block;
+    font-weight: 600;
+    color: var(--muted);
+    margin-bottom: 12px;
+    font-size: 0.9rem;
+    text-transform: uppercase;
+}
+
+/* Стили для input[type=color] */
+.setting-row.colors {
+    gap: 10px;
+    margin-bottom: 0;
+}
+.setting-row.colors label {
+    font-size: 0.9rem;
+    white-space: normal;
+}
+.setting-row.colors input[type="color"] {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    width: 32px;
+    height: 32px;
+    background-color: transparent;
+    border: none;
+    cursor: pointer;
+    border-radius: 50%;
+    overflow: hidden;
+    border: 2px solid rgba(255, 255, 255, 0.1);
+}
+.setting-row.colors input[type="color"]::-webkit-color-swatch {
+    border: none;
+    border-radius: 50%;
+    padding: 0;
+}
+.setting-row.colors input[type="color"]::-moz-color-swatch {
+    border: none;
+    border-radius: 50%;
+    padding: 0;
+}
+
+/* Стили для переключателя (toggle switch) */
+.toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 51px;
+    height: 31px;
+    flex-shrink: 0;
+}
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #333c50;
+    transition: 0.4s;
+    border-radius: 34px;
+}
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 23px;
+    width: 23px;
+    left: 4px;
+    bottom: 4px;
+    background-color: white;
+    transition: 0.4s;
+    border-radius: 50%;
+}
+input:checked + .slider {
+    background-color: var(--accent);
+}
+input:checked + .slider:before {
+    transform: translateX(20px);
+}
+/* Маленькая версия */
+.toggle-switch.small {
+    width: 40px;
+    height: 24px;
+}
+.toggle-switch.small .slider:before {
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 3px;
+}
+.toggle-switch.small input:checked + .slider:before {
+    transform: translateX(16px);
+}
+
+/* Строка с переключателем и инпутом */
+.setting-row-toggle {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 10px;
+}
+.setting-row-toggle .setting-input {
+    flex-grow: 1;
+    transition:
+        opacity 0.3s,
+        transform 0.3s;
+}
+/* Скрываем инпут, если чекбокс выключен */
+.setting-row-toggle input[type="checkbox"]:not(:checked) ~ .setting-input {
+    opacity: 0.5;
+    pointer-events: none;
+    background: #0e1525;
+}
+
+/* Группа радиокнопок */
+.radio-group {
+    display: flex;
+    justify-content: space-around;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+.radio-group div {
+    flex-grow: 1;
+}
+.radio-group input[type="radio"] {
+    display: none;
+}
+.radio-group label {
+    display: block;
+    text-align: center;
+    padding: 8px 10px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: #0e1525;
+    border-radius: 12px;
+    cursor: pointer;
+    color: var(--muted);
+    font-weight: 600;
+    transition: all 0.2s;
+}
+.radio-group input[type="radio"]:checked + label {
+    background: var(--accent);
+    color: var(--bg);
+    border-color: var(--accent);
+}
+.radio-group.logo-type label {
+    width: 100%;
+}
+
+/* === НОВЫЕ СТИЛИ: Сам бейдж (из примера) + Стили оверлея === */
+
+/* 1. Контейнер-оверлей */
+.badge-overlay-container {
+    position: absolute;
+    z-index: 20;
+    display: none; /* Показывается JS */
+    /* Стили позиционирования применяются классами .pos-* */
+
+    /* Отступы, чтобы не прилипать к краям */
+    --badge-margin-v: 20px;
+    /* 80px, чтобы быть над панелью управления */
+    --badge-margin-bottom: 80px;
+    --badge-margin-h: 20px;
+}
+
+/* 2. Классы позиционирования */
+.badge-overlay-container.pos-top-left {
+    top: var(--badge-margin-v);
+    left: var(--badge-margin-h);
+}
+.badge-overlay-container.pos-top-center {
+    top: var(--badge-margin-v);
+    left: 50%;
+    transform: translateX(-50%);
+}
+.badge-overlay-container.pos-top-right {
+    top: var(--badge-margin-v);
+    right: var(--badge-margin-h);
+}
+.badge-overlay-container.pos-bottom-left {
+    bottom: var(--badge-margin-bottom);
+    left: var(--badge-margin-h);
+}
+.badge-overlay-container.pos-bottom-center {
+    bottom: var(--badge-margin-bottom);
+    left: 50%;
+    transform: translateX(-50%);
+}
+.badge-overlay-container.pos-bottom-right {
+    bottom: var(--badge-margin-bottom);
+    right: var(--badge-margin-h);
+}
+
+/* 3. Стили самого бейджика (из примера) */
+.smart-badge {
+    display: flex;
+    align-items: flex-start;
+    padding: 12px; /* Уменьшил отступы для оверлея */
+    border-radius: 12px;
+    box-shadow: 0 5px 20px rgba(0, 0, 0, 0.5);
+    overflow: hidden;
+    max-width: 300px; /* Начальная ширина */
+    outline: 2px solid transparent;
+    outline-offset: 3px;
+    background-color: var(--bg); /* Зададим по умолчанию */
+
+    transition:
+        max-width 0.35s ease-out,
+        background-color 0.3s,
+        outline-color 0.3s;
+
+    /* === НОВОЕ: Для WebKit (Chrome, Safari) фон с блюром === */
+    /* @supports (-webkit-backdrop-filter: none) or (backdrop-filter: none) {
+        -webkit-backdrop-filter: blur(10px);
+        backdrop-filter: blur(10px);
+        background-color: rgba(17, 24, 39, 0.7);
+    }
+    */
+}
+
+.smart-badge:hover {
+    max-width: 450px; /* Ширина при наведении */
+}
+
+/* 4. Логотип */
+.badge-logo {
+    display: none; /* Скрыт, пока не задан src */
+}
+.badge-logo img {
+    width: 48px; /* Уменьшил лого */
+    height: 48px;
+    margin-right: 12px;
+    flex-shrink: 0;
+    object-fit: cover;
+    border-radius: 8px; /* Скруглил углы лого */
+}
+
+/* 5. Контейнер для текста */
+.badge-content {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+/* 6. "Основная" информация */
+.badge-main {
+    color: #ffffff;
+}
+.badge-main h3,
+.badge-main p {
+    margin: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.badge-main h3 {
+    font-size: 1rem;
+    font-weight: 700;
+}
+.badge-main p {
+    font-size: 0.85rem;
+    font-weight: 400;
+    opacity: 0.8;
+}
+
+/* 7. "Детальная" информация (скрыта) */
+.badge-details {
+    max-height: 0;
+    opacity: 0;
+    overflow: hidden;
+    transition:
+        max-height 0.3s ease-out,
+        opacity 0.3s 0.1s,
+        margin-top 0.3s ease-out;
+
+    color: #f0f0f0;
+    font-size: 0.8rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+/* 8. Состояние :hover */
+.smart-badge:hover .badge-details {
+    max-height: 200px;
+    opacity: 1;
+    margin-top: 10px;
+    padding-top: 8px;
+}
+
+/* 9. Строка "иконка + текст" */
+.detail-item {
+    display: none; /* Скрываем все по умолчанию, показываем JS */
+    align-items: center;
+    margin-top: 6px;
+}
+.detail-item i {
+    width: 18px;
+    text-align: center;
+    margin-right: 8px;
+    opacity: 0.7;
+}
+
+/* 10. Текст или ссылка */
+.detail-item span,
+.detail-item a {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: inherit;
+    text-decoration: none;
+}
+.detail-item a:hover {
+    text-decoration: underline;
+}
+.slogan-text {
+    font-style: italic;
+    opacity: 0.9;
 }
