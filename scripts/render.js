@@ -1,18 +1,62 @@
+// scripts/render.js
 'use strict';
 
 import { els } from './dom.js';
 import {
   running, lastTs, fpsSamples, cpuSamples, gpuSamples,
-  setRafId, setLastTs, incFrame
+  setRafId, setLastTs, incFrame, frameIdx
 } from './state.js';
 import { avg, fmtNum, clamp01, pushSample } from './utils.js';
 import { gpuProbe } from './gpu.js';
-import { enqueueSegmentation, getOverlayBitmap } from './inference_onnx.js';
+import { enqueueSegmentation, getOverlayBitmap, getProbBitmap, hasModel } from './inference_onnx.js';
 
-const INFER_EVERY = 2;       // инференс маски раз в 2 кадра (под iGPU можно 3–4)
+const INFER_EVERY = 2;       // инференс маски раз в 2 кадра
 const GPU_PROBE_EVERY = 10;  // реже пробуем GPU, чтобы не мешать рендеру
 
 let lastGpuProbeAt = 0;
+let maskCanvas, maskCtx;
+
+// Создаём мини-панель для отдельного вывода «карты вероятностей»
+function ensureMaskCanvas() {
+  if (maskCanvas) return;
+  const wrapper = document.createElement('div');
+  Object.assign(wrapper.style, {
+    position: 'fixed',
+    right: '16px',
+    bottom: '16px',
+    background: 'rgba(0,0,0,0.6)',
+    border: '1px solid rgba(255,255,255,0.15)',
+    borderRadius: '12px',
+    padding: '8px',
+    zIndex: 9999,
+    backdropFilter: 'blur(6px)',
+  });
+
+  const title = document.createElement('div');
+  title.textContent = 'Model output (prob)';
+  Object.assign(title.style, {
+    fontSize: '12px',
+    color: '#d9e1ee',
+    margin: '0 0 6px',
+    opacity: 0.8,
+  });
+
+  maskCanvas = document.createElement('canvas');
+  maskCanvas.width = 320;
+  maskCanvas.height = 180; // 16:9 по умолчанию, масштабируем дальше
+  Object.assign(maskCanvas.style, {
+    display: 'block',
+    width: '320px',
+    height: '180px',
+    borderRadius: '8px',
+    background: '#000',
+  });
+  maskCtx = maskCanvas.getContext('2d', { alpha: false });
+
+  wrapper.appendChild(title);
+  wrapper.appendChild(maskCanvas);
+  document.body.appendChild(wrapper);
+}
 
 // одинаковая геометрия с препроцессингом: letterbox + зеркалирование
 function drawLetterboxed(ctx, src, dstW, dstH, mirror) {
@@ -28,7 +72,6 @@ function drawLetterboxed(ctx, src, dstW, dstH, mirror) {
   ctx.clearRect(0, 0, dstW, dstH);
   if (mirror) {
     ctx.setTransform(-1, 0, 0, 1, dstW, 0);
-    // NB: при зеркале сдвиг остаётся таким же — матрица трансформации всё «перевернёт»
     ctx.drawImage(src, dx, dy, nw, nh);
   } else {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -40,6 +83,7 @@ function drawLetterboxed(ctx, src, dstW, dstH, mirror) {
 export function startLoop() {
   const hasRVFC = 'requestVideoFrameCallback' in HTMLVideoElement.prototype;
   const ctx = els.canvas.getContext('2d', { alpha: false });
+  ensureMaskCanvas();
 
   const render = async () => {
     if (!running) return;
@@ -58,11 +102,11 @@ export function startLoop() {
       drawLetterboxed(ctx, els.video, els.canvas.width, els.canvas.height, true);
 
       // 2) Фоновый инференс сегментации каждые N кадров (fire-and-forget)
-      if ((fpsSamples.length % INFER_EVERY) === 0) {
+      if (hasModel() && (frameIdx % INFER_EVERY) === 0) {
         enqueueSegmentation(els.video, { mirror: true });
       }
 
-      // 3) Наложение зелёной инвертированной маски (готовый ImageBitmap 640x640)
+      // 3) Наложение зелёной инвертированной маски поверх видео
       const overlay = getOverlayBitmap();
       if (overlay) {
         ctx.globalCompositeOperation = 'source-over';
@@ -70,7 +114,26 @@ export function startLoop() {
         ctx.drawImage(overlay, 0, 0, els.canvas.width, els.canvas.height);
       }
 
-      // 4) Неблокирующая оценка GPU utilization
+      // 4) Отдельный вывод «карты вероятностей» модели
+      const prob = getProbBitmap();
+      if (prob && maskCtx) {
+        // подгоняем мини-канвас под соотношение сторон карты
+        const mw = prob.width;
+        const mh = prob.height;
+        const targetW = 320;
+        const targetH = Math.round(targetW * (mh / mw));
+        if (maskCanvas.width !== targetW || maskCanvas.height !== targetH) {
+          maskCanvas.width = targetW;
+          maskCanvas.height = targetH;
+          maskCanvas.style.width = `${targetW}px`;
+          maskCanvas.style.height = `${targetH}px`;
+        }
+        maskCtx.globalCompositeOperation = 'source-over';
+        maskCtx.globalAlpha = 1;
+        maskCtx.drawImage(prob, 0, 0, maskCanvas.width, maskCanvas.height);
+      }
+
+      // 5) Неблокирующая оценка GPU utilization
       const now = performance.now();
       const dtMs = now - lastTs;
 
@@ -87,7 +150,7 @@ export function startLoop() {
         }).catch(()=>{});
       }
 
-      // 5) FPS/CPU метрики
+      // 6) FPS/CPU метрики
       const afterDraw = performance.now();
       const dt = afterDraw - lastTs;
       const busy = afterDraw - frameStart;

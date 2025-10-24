@@ -1,7 +1,9 @@
+// scripts/inference_onnx.js
 'use strict';
 
 const SIZE = 640;
 
+// ---- ГЛОБАЛЬНАЯ ССЫЛКА НА onnxruntime-web (видна всем функциям модуля) ----
 let ORT = null;
 function getORT() {
   if (!ORT) ORT = globalThis.ort ?? null;
@@ -11,7 +13,8 @@ function getORT() {
 // Состояние
 let session = null;
 let inFlight = false;
-let lastOverlayBitmap = null;
+let lastOverlayBitmap = null;  // зелёная инвертированная маска для наложения
+let lastProbBitmap = null;     // отдельная «карта вероятностей» (градации серого)
 let canvasW = SIZE, canvasH = SIZE;
 
 let preprocessCanvas = null;
@@ -22,14 +25,15 @@ let inputName = null;
 let outputName = null;
 
 let chwBuffer = null;              // Float32 [1,3,H,W]
-let rgbaBuffer = null;             // Uint8Clamped [H*W*4]
+let rgbaBuffer = null;             // Uint8Clamped [H*W*4] для зелёной маски
+let rgbaProbBuffer = null;         // Uint8Clamped [H*W*4] для серой карты вероятностей
 
 // Тюнинги под датасет
 const USE_LETTERBOX = true;
-const CHANNELS_BGR = false;
-const NORM_01 = true;
-const USE_IMAGENET_NORM = false;
-const APPLY_SIGMOID = true;
+const CHANNELS_BGR = false;        // true, если модель обучалась на BGR
+const NORM_01 = true;              // 0..1
+const USE_IMAGENET_NORM = false;   // mean/std = 0.485,0.456,0.406 / 0.229,0.224,0.225
+const APPLY_SIGMOID = true;        // если выход — логиты
 
 const mean = USE_IMAGENET_NORM ? [0.485, 0.456, 0.406] : [0,0,0];
 const std  = USE_IMAGENET_NORM ? [0.229, 0.224, 0.225] : [1,1,1];
@@ -67,9 +71,12 @@ export async function initSegmentation({ modelUrl, preferBackend = 'webgpu' } = 
   inputName = session.inputNames[0];
   outputName = session.outputNames[0];
 
-  chwBuffer = new Float32Array(1 * 3 * canvasH * canvasW);
-  rgbaBuffer = new Uint8ClampedArray(canvasH * canvasW * 4);
+  const plane = canvasH * canvasW;
+  chwBuffer = new Float32Array(1 * 3 * plane);
+  rgbaBuffer = new Uint8ClampedArray(plane * 4);
+  rgbaProbBuffer = new Uint8ClampedArray(plane * 4);
 
+  // тёплый прогон
   const dummy = new ns.Tensor('float32', chwBuffer, [1, 3, canvasH, canvasW]);
   await session.run({ [inputName]: dummy });
 }
@@ -83,6 +90,7 @@ export function enqueueSegmentation(videoEl, { mirror = true } = {}) {
 }
 
 export function getOverlayBitmap() { return lastOverlayBitmap; }
+export function getProbBitmap() { return lastProbBitmap; } // <— отдаём отдельное изображение карты вероятностей
 
 // --- утилиты ---
 function sigmoid(x) { return 1 / (1 + Math.exp(-x)); }
@@ -109,7 +117,6 @@ function letterboxDraw(ctx, src, dstW, dstH, mirror) {
     ctx.drawImage(src, dx, dy, nw, nh);
   }
   ctx.restore();
-
   return { dx, dy, nw, nh };
 }
 
@@ -197,37 +204,59 @@ async function runOnce(videoEl, { mirror }) {
     flat = buf;
   }
 
-  // 6) активация/порог/ИНВЕРСИЯ (зелёный хромакей по фону)
+  // 6) активация/порог/ИНВЕРСИЯ (зелёный хромакей по фону) + отдельная «probability map»
   let min = +Infinity, max = -Infinity, ones = 0;
   for (let i = 0; i < flat.length; i++) {
     let v = flat[i];
     if (APPLY_SIGMOID) v = sigmoid(v);
     min = Math.min(min, v); max = Math.max(max, v);
+
+    // бинаризация + инверсия для зелёной маски
     const bin = v > 0.5 ? 1 : 0;
-    const inv = 1 - bin; // инверсия
-    if (inv) ones++;
+    const inv = 1 - bin;
+
+    // запись зелёной маски
     const j = i * 4;
     rgbaBuffer[j+0] = 0;
     rgbaBuffer[j+1] = inv ? 255 : 0;
     rgbaBuffer[j+2] = 0;
     rgbaBuffer[j+3] = inv ? 160 : 0;
+    if (inv) ones++;
+
+    // запись карты вероятностей (градации серого 0..255, непрозрачная)
+    const g = Math.max(0, Math.min(255, Math.round(v * 255)));
+    rgbaProbBuffer[j+0] = g;
+    rgbaProbBuffer[j+1] = g;
+    rgbaProbBuffer[j+2] = g;
+    rgbaProbBuffer[j+3] = 255;
   }
   if (Math.random() < 0.1) {
     console.log(`[mask] min=${min.toFixed(3)} max=${max.toFixed(3)} green(inv)%=${(100*ones/flat.length).toFixed(1)}`);
   }
 
-  // 7) bitmap для наложения
+  // 7) bitmaps для вывода
   const overlayImageData = new ImageData(rgbaBuffer, canvasW, canvasH);
-  let overlaySourceCanvas;
-  try { overlaySourceCanvas = new OffscreenCanvas(canvasW, canvasH); }
-  catch {
+  const probImageData = new ImageData(rgbaProbBuffer, canvasW, canvasH);
+
+  let overlaySourceCanvas, probSourceCanvas;
+  try {
+    overlaySourceCanvas = new OffscreenCanvas(canvasW, canvasH);
+    probSourceCanvas = new OffscreenCanvas(canvasW, canvasH);
+  } catch {
     overlaySourceCanvas = document.createElement('canvas');
-    overlaySourceCanvas.width = canvasW;
-    overlaySourceCanvas.height = canvasH;
+    overlaySourceCanvas.width = canvasW; overlaySourceCanvas.height = canvasH;
+    probSourceCanvas = document.createElement('canvas');
+    probSourceCanvas.width = canvasW; probSourceCanvas.height = canvasH;
   }
+
   const octx = overlaySourceCanvas.getContext('2d');
   octx.putImageData(overlayImageData, 0, 0);
+  const pctx = probSourceCanvas.getContext('2d');
+  pctx.putImageData(probImageData, 0, 0);
 
   if (lastOverlayBitmap) { try { lastOverlayBitmap.close?.(); } catch {} }
+  if (lastProbBitmap) { try { lastProbBitmap.close?.(); } catch {} }
+
   lastOverlayBitmap = await createImageBitmap(overlaySourceCanvas);
+  lastProbBitmap = await createImageBitmap(probSourceCanvas);
 }
