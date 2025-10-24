@@ -1,6 +1,14 @@
 'use strict';
 
 const SIZE = 640;
+
+let ORT = null;
+function getORT() {
+  if (!ORT) ORT = globalThis.ort ?? null;
+  return ORT;
+}
+
+// Состояние
 let session = null;
 let inFlight = false;
 let lastOverlayBitmap = null;
@@ -13,15 +21,15 @@ let prefer = 'webgpu';
 let inputName = null;
 let outputName = null;
 
-let chwBuffer = null;              // Float32 [1,3,H,W]
-let rgbaBuffer = null;             // Uint8Clamped [H*W*4]
+let chwBuffer = null;
+let rgbaBuffer = null;
 
 // Тюнинги под датасет
 const USE_LETTERBOX = true;
-const CHANNELS_BGR = false;        // true, если модель обучалась на BGR
-const NORM_01 = true;              // 0..1
-const USE_IMAGENET_NORM = false;   // mean/std = 0.485,0.456,0.406 / 0.229,0.224,0.225
-const APPLY_SIGMOID = true;        // если выход — логиты
+const CHANNELS_BGR = false;
+const NORM_01 = true;
+const USE_IMAGENET_NORM = false;
+const APPLY_SIGMOID = true;
 
 const mean = USE_IMAGENET_NORM ? [0.485, 0.456, 0.406] : [0,0,0];
 const std  = USE_IMAGENET_NORM ? [0.229, 0.224, 0.225] : [1,1,1];
@@ -47,12 +55,13 @@ export async function initSegmentation({ modelUrl, preferBackend = 'webgpu' } = 
   prefer = preferBackend;
   makePreprocessCanvas(canvasW, canvasH);
 
-  const ORT = globalThis.ort;
-  if (!('gpu' in navigator) || !ORT?.env?.webgpu) {
+  const ns = getORT();
+  if (!('gpu' in navigator) || !ns?.env?.webgpu) {
     throw new Error('WebGPU is not available.');
   }
+
   const sessOpts = { executionProviders: ['webgpu'] };
-  session = await ORT.InferenceSession.create(modelUrl, sessOpts);
+  session = await ns.InferenceSession.create(modelUrl, sessOpts);
   console.log('ORT EP picked:', session?.executionProvider ?? 'webgpu (requested)');
 
   inputName = session.inputNames[0];
@@ -61,8 +70,7 @@ export async function initSegmentation({ modelUrl, preferBackend = 'webgpu' } = 
   chwBuffer = new Float32Array(1 * 3 * canvasH * canvasW);
   rgbaBuffer = new Uint8ClampedArray(canvasH * canvasW * 4);
 
-  // тёплый прогон
-  const dummy = new ORT.Tensor('float32', chwBuffer, [1, 3, canvasH, canvasW]);
+  const dummy = new ns.Tensor('float32', chwBuffer, [1, 3, canvasH, canvasW]);
   await session.run({ [inputName]: dummy });
 }
 
@@ -76,7 +84,6 @@ export function enqueueSegmentation(videoEl, { mirror = true } = {}) {
 
 export function getOverlayBitmap() { return lastOverlayBitmap; }
 
-// --- утилиты ---
 function sigmoid(x) { return 1 / (1 + Math.exp(-x)); }
 
 function letterboxDraw(ctx, src, dstW, dstH, mirror) {
@@ -90,41 +97,44 @@ function letterboxDraw(ctx, src, dstW, dstH, mirror) {
 
   ctx.save();
   ctx.clearRect(0, 0, dstW, dstH);
-  // паддинги чёрные
   ctx.fillStyle = 'black';
   ctx.fillRect(0, 0, dstW, dstH);
 
   if (mirror) {
     ctx.setTransform(-1, 0, 0, 1, dstW, 0);
-    // Для зеркала смещаем область рисования
     ctx.drawImage(src, dx, dy, nw, nh);
   } else {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.drawImage(src, dx, dy, nw, nh);
   }
   ctx.restore();
-
   return { dx, dy, nw, nh };
 }
 
 async function runOnce(videoEl, { mirror }) {
+  const ns = getORT();
+  if (!ns) {
+    console.warn('[onnx] ORT namespace not available');
+    return;
+  }
+
   makePreprocessCanvas(canvasW, canvasH);
 
   // 1) letterbox/resize в препроцесс canvas
-  const info = USE_LETTERBOX
+  USE_LETTERBOX
     ? letterboxDraw(preprocessCtx, videoEl, canvasW, canvasH, mirror)
     : (preprocessCtx.save(), preprocessCtx.clearRect(0,0,canvasW,canvasH),
        mirror ? preprocessCtx.setTransform(-1,0,0,1,canvasW,0) : preprocessCtx.setTransform(1,0,0,1,0,0),
        preprocessCtx.drawImage(videoEl, 0, 0, canvasW, canvasH),
-       preprocessCtx.restore(), { dx:0, dy:0, nw:canvasW, nh:canvasH });
+       preprocessCtx.restore());
 
   // 2) забираем RGBA
   const img = preprocessCtx.getImageData(0, 0, canvasW, canvasH);
   const data = img.data;
   const plane = canvasW * canvasH;
 
-  // 3) HWC->CHW + опциональные преобразования (BGR/mean/std)
-  const C0 = CHANNELS_BGR ? 2 : 0; // если BGR, то порядок B,G,R
+  // 3) HWC->CHW + нормализации
+  const C0 = CHANNELS_BGR ? 2 : 0;
   const C1 = 1;
   const C2 = CHANNELS_BGR ? 0 : 2;
 
@@ -138,20 +148,17 @@ async function runOnce(videoEl, { mirror }) {
     let g = data[i + 1] / (NORM_01 ? 255 : 1);
     let b = data[i + 2] / (NORM_01 ? 255 : 1);
 
-    // mean/std
     r = (r - mean0) / std0;
     g = (g - mean1) / std1;
     b = (b - mean2) / std2;
 
-    // кладём в CHW с нужным порядком
     chwBuffer[(C0 === 0 ? R : (C0 === 1 ? G : B)) + px] = r;
     chwBuffer[(C1 === 0 ? R : (C1 === 1 ? G : B)) + px] = g;
     chwBuffer[(C2 === 0 ? R : (C2 === 1 ? G : B)) + px] = b;
   }
 
-  const input = new ORT.Tensor('float32', chwBuffer, [1, 3, canvasH, canvasW]);
-
   // 4) инференс
+  const input = new ns.Tensor('float32', chwBuffer, [1, 3, canvasH, canvasW]);
   const t0 = performance.now();
   const out = await session.run({ [inputName]: input });
   const tensor = out[outputName];
@@ -160,28 +167,24 @@ async function runOnce(videoEl, { mirror }) {
 
   // 5) приводим к плоскости [H*W], учитывая возможные оси
   let flat = null, dims = tensor.dims, buf = tensor.data;
-  // Нормализуем к [H,W]
   if (dims.length === 4) { // [N,C,H,W] или [N,H,W,C]
     const [N,A,B,C] = dims;
     if (A === 1) {         // [1,1,H,W]
-      flat = buf; // уже линейно по H*W
-    } else if (C === 1) {  // [1,H,W,1] -> нужно перестроить
-      // NHWC: компактно скопируем первый канал
-      flat = new Float32Array(B * C); // но B здесь H, C здесь W — см. dims
-      // аккуратнее:
+      flat = buf;
+    } else if (C === 1) {  // [1,H,W,1] (NHWC)
       const H = B, W = C;
       flat = new Float32Array(H * W);
       for (let y = 0; y < H; y++) {
         for (let x = 0; x < W; x++) {
-          flat[y*W + x] = buf[(0*H + y)*W*1 + x*1 + 0]; // NHWC
+          flat[y*W + x] = buf[(0*H + y)*W*1 + x]; // NHWC, берём единственный канал
         }
       }
     } else {
-      // неизвестный формат — допустим первый канал в NCHW
-      flat = new Float32Array(B * C);
+      // допустим NCHW и берём C0
       const H = B, W = C;
       const stride = H * W;
-      for (let i = 0; i < stride; i++) flat[i] = buf[i]; // C0
+      flat = new Float32Array(stride);
+      for (let i = 0; i < stride; i++) flat[i] = buf[i];
     }
   } else if (dims.length === 3) { // [1,H,W]
     flat = buf;
@@ -189,7 +192,7 @@ async function runOnce(videoEl, { mirror }) {
     flat = buf;
   }
 
-  // 6) активация/порог/инверсия
+  // 6) активация/порог/инверсия (зелёный хромакей по фону)
   let min = +Infinity, max = -Infinity, ones = 0;
   for (let i = 0; i < flat.length; i++) {
     let v = flat[i];
@@ -197,7 +200,6 @@ async function runOnce(videoEl, { mirror }) {
     min = Math.min(min, v); max = Math.max(max, v);
     const bin = v > 0.5 ? 1 : 0;
     const inv = 1 - bin;
-    // const inv = bin;
     if (inv) ones++;
     const j = i * 4;
     rgbaBuffer[j+0] = 0;
@@ -205,9 +207,8 @@ async function runOnce(videoEl, { mirror }) {
     rgbaBuffer[j+2] = 0;
     rgbaBuffer[j+3] = inv ? 160 : 0;
   }
-  // Диагностика в консоль (1 раз в несколько прогонов можно оставить)
-  if (Math.random() < 0.05) {
-    console.log(`[mask] min=${min.toFixed(3)} max=${max.toFixed(3)} green%=${(100*ones/flat.length).toFixed(1)}`);
+  if (Math.random() < 0.1) {
+    console.log(`[mask] min=${min.toFixed(3)} max=${max.toFixed(3)} green(inv)%=${(100*ones/flat.length).toFixed(1)}`);
   }
 
   // 7) bitmap для наложения
