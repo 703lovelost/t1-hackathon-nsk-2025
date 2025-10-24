@@ -747,3 +747,7 @@ input:checked + .slider:before {
     font-style: italic;
     opacity: 0.9;
 }
+
+.hidden {
+    display: none !important;
+}

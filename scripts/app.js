@@ -42,6 +42,11 @@ const els = {
     sloganText: document.getElementById("badge-slogan-text"), // --- Элементы управления в модальном окне ---
 
     toggleShow: document.getElementById("badge-toggle-show"),
+
+    // === ДОБАВЛЕНО: Ссылка на группу настроек ===
+    settingsGroup: document.getElementById("badge-settings-group"),
+    // === КОНЕЦ ДОБАВЛЕНИЯ ===
+
     positionRadios: document.querySelectorAll('input[name="badge-position"]'),
     logoTypeRadios: document.querySelectorAll('input[name="badge-logo-type"]'),
     logoUrl: document.getElementById("badge-logo-url"),
@@ -361,6 +366,22 @@ function closeSettings() {
 
 // === НОВЫЕ ФУНКЦИИ: Управление бейджем ===
 
+// === ДОБАВЛЕНО: Новая функция для скрытия/показа ===
+/**
+ * Показывает или скрывает группу настроек бейджа
+ * в зависимости от главного переключателя.
+ */
+function toggleBadgeSettingsVisibility() {
+  if (!els.badge.toggleShow || !els.badge.settingsGroup) return; // Проверка
+
+  if (els.badge.toggleShow.checked) {
+    els.badge.settingsGroup.classList.remove("hidden");
+  } else {
+    els.badge.settingsGroup.classList.add("hidden");
+  }
+}
+// === КОНЕЦ ДОБАВЛЕНИЯ ===
+
 /**
  * Рендерит бейдж на основе текущего объекта badgeSettings
  */
@@ -537,6 +558,10 @@ function handleBadgeSettingChange() {
   } // Перерисовываем бейдж
 
   renderBadge();
+
+  // === ДОБАВЛЕНО: Обновляем видимость настроек ===
+  toggleBadgeSettingsVisibility();
+  // === КОНЕЦ ДОБАВЛЕНИЯ ===
 }
 
 /**
@@ -734,6 +759,10 @@ function loadBadgeSettings() {
   if (b.logoWarning) b.logoWarning.textContent = ""; // Рендерим бейдж с загруженными настройками
 
   renderBadge();
+
+  // === ДОБАВЛЕНО: Устанавливаем начальную видимость ===
+  toggleBadgeSettingsVisibility();
+  // === КОНЕЦ ДОБАВЛЕНИЯ ===
 }
 
 // ==== Initialization and Event Listeners ====
@@ -745,6 +774,7 @@ async function init() {
     );
   } // === ИЗМЕНЕНИЕ: Сначала загружаем настройки бейджа, потом вешаем обработчики ===
 
+  els.badge.settingsGroup = document.getElementById("badge-settings-group");
   loadBadgeSettings();
 
   await listCameras();

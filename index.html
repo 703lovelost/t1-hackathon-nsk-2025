@@ -159,258 +159,264 @@
                             </label>
                         </div>
 
-                        <hr class="divider" />
+                        <div id="badge-settings-group">
+                            <hr class="divider" />
 
-                        <div class="setting-group">
-                            <label class="group-label">Позиция на экране</label>
-                            <div class="radio-group">
-                                <div>
-                                    <input
-                                        type="radio"
-                                        id="pos-tl"
-                                        name="badge-position"
-                                        value="pos-top-left"
-                                    />
-                                    <label for="pos-tl">↖</label>
-                                </div>
-                                <div>
-                                    <input
-                                        type="radio"
-                                        id="pos-tc"
-                                        name="badge-position"
-                                        value="pos-top-center"
-                                    />
-                                    <label for="pos-tc">↑</label>
-                                </div>
-                                <div>
-                                    <input
-                                        type="radio"
-                                        id="pos-tr"
-                                        name="badge-position"
-                                        value="pos-top-right"
-                                    />
-                                    <label for="pos-tr">↗</label>
-                                </div>
-                                <div>
-                                    <input
-                                        type="radio"
-                                        id="pos-bl"
-                                        name="badge-position"
-                                        value="pos-bottom-left"
-                                        checked
-                                    />
-                                    <label for="pos-bl">↙</label>
-                                </div>
-                                <div>
-                                    <input
-                                        type="radio"
-                                        id="pos-bc"
-                                        name="badge-position"
-                                        value="pos-bottom-center"
-                                    />
-                                    <label for="pos-bc">↓</label>
-                                </div>
-                                <div>
-                                    <input
-                                        type="radio"
-                                        id="pos-br"
-                                        name="badge-position"
-                                        value="pos-bottom-right"
-                                    />
-                                    <label for="pos-br">↘</label>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="setting-group">
-                            <label class="group-label">Логотип</label>
-                            <div class="radio-group logo-type">
-                                <div>
-                                    <input
-                                        type="radio"
-                                        id="logo-type-url"
-                                        name="badge-logo-type"
-                                        value="url"
-                                        checked
-                                    />
-                                    <label for="logo-type-url">URL</label>
-                                </div>
-                                <div>
-                                    <input
-                                        type="radio"
-                                        id="logo-type-upload"
-                                        name="badge-logo-type"
-                                        value="upload"
-                                    />
-                                    <label for="logo-type-upload"
-                                        >Загрузить</label
-                                    >
-                                </div>
-                            </div>
-                            <input
-                                type="text"
-                                id="badge-logo-url"
-                                class="setting-input"
-                                placeholder="https://example.com/logo.png"
-                            />
-                            <input
-                                type="file"
-                                id="badge-logo-upload"
-                                class="setting-input hidden"
-                                accept="image/png, image/jpeg"
-                            />
-                            <small
-                                id="badge-logo-warning"
-                                class="warning-text"
-                            ></small>
-                        </div>
-
-                        <div class="setting-group">
-                            <label class="group-label">Цвета</label>
-                            <div class="setting-row colors">
-                                <label for="badge-color-primary">Фон:</label>
-                                <input
-                                    type="color"
-                                    id="badge-color-primary"
-                                    value="#0052CC"
-                                />
-                                <label for="badge-color-secondary"
-                                    >Акцент:</label
+                            <div class="setting-group">
+                                <label class="group-label"
+                                    >Позиция на экране</label
                                 >
-                                <input
-                                    type="color"
-                                    id="badge-color-secondary"
-                                    value="#00B8D9"
-                                />
+                                <div class="radio-group">
+                                    <div>
+                                        <input
+                                            type="radio"
+                                            id="pos-tl"
+                                            name="badge-position"
+                                            value="pos-top-left"
+                                        />
+                                        <label for="pos-tl">↖</label>
+                                    </div>
+                                    <div>
+                                        <input
+                                            type="radio"
+                                            id="pos-tc"
+                                            name="badge-position"
+                                            value="pos-top-center"
+                                        />
+                                        <label for="pos-tc">↑</label>
+                                    </div>
+                                    <div>
+                                        <input
+                                            type="radio"
+                                            id="pos-tr"
+                                            name="badge-position"
+                                            value="pos-top-right"
+                                        />
+                                        <label for="pos-tr">↗</label>
+                                    </div>
+                                    <div>
+                                        <input
+                                            type="radio"
+                                            id="pos-bl"
+                                            name="badge-position"
+                                            value="pos-bottom-left"
+                                            checked
+                                        />
+                                        <label for="pos-bl">↙</label>
+                                    </div>
+                                    <div>
+                                        <input
+                                            type="radio"
+                                            id="pos-bc"
+                                            name="badge-position"
+                                            value="pos-bottom-center"
+                                        />
+                                        <label for="pos-bc">↓</label>
+                                    </div>
+                                    <div>
+                                        <input
+                                            type="radio"
+                                            id="pos-br"
+                                            name="badge-position"
+                                            value="pos-bottom-right"
+                                        />
+                                        <label for="pos-br">↘</label>
+                                    </div>
+                                </div>
                             </div>
-                        </div>
 
-                        <div class="setting-group">
-                            <label class="group-label"
-                                >Поля (введите данные)</label
-                            >
+                            <div class="setting-group">
+                                <label class="group-label">Логотип</label>
+                                <div class="radio-group logo-type">
+                                    <div>
+                                        <input
+                                            type="radio"
+                                            id="logo-type-url"
+                                            name="badge-logo-type"
+                                            value="url"
+                                            checked
+                                        />
+                                        <label for="logo-type-url">URL</label>
+                                    </div>
+                                    <div>
+                                        <input
+                                            type="radio"
+                                            id="logo-type-upload"
+                                            name="badge-logo-type"
+                                            value="upload"
+                                        />
+                                        <label for="logo-type-upload"
+                                            >Загрузить</label
+                                        >
+                                    </div>
+                                </div>
+                                <input
+                                    type="text"
+                                    id="badge-logo-url"
+                                    class="setting-input"
+                                    placeholder="https://example.com/logo.png"
+                                />
+                                <input
+                                    type="file"
+                                    id="badge-logo-upload"
+                                    class="setting-input hidden"
+                                    accept="image/png, image/jpeg"
+                                />
+                                <small
+                                    id="badge-logo-warning"
+                                    class="warning-text"
+                                ></small>
+                            </div>
 
-                            <div class="setting-row-toggle">
-                                <input
-                                    type="text"
-                                    id="badge-field-name"
-                                    class="setting-input"
-                                    placeholder="Иванов Сергей Петрович"
-                                />
-                                <label class="toggle-switch small">
+                            <div class="setting-group">
+                                <label class="group-label">Цвета</label>
+                                <div class="setting-row colors">
+                                    <label for="badge-color-primary"
+                                        >Фон:</label
+                                    >
                                     <input
-                                        type="checkbox"
-                                        id="badge-toggle-name"
-                                        checked
+                                        type="color"
+                                        id="badge-color-primary"
+                                        value="#0052CC"
                                     />
-                                    <span class="slider"></span>
-                                </label>
+                                    <label for="badge-color-secondary"
+                                        >Акцент:</label
+                                    >
+                                    <input
+                                        type="color"
+                                        id="badge-color-secondary"
+                                        value="#00B8D9"
+                                    />
+                                </div>
                             </div>
-                            <div class="setting-row-toggle">
-                                <input
-                                    type="text"
-                                    id="badge-field-company"
-                                    class="setting-input"
-                                    placeholder="ООО «Рога и Копыта»"
-                                />
-                                <label class="toggle-switch small">
+
+                            <div class="setting-group">
+                                <label class="group-label"
+                                    >Поля (введите данные)</label
+                                >
+
+                                <div class="setting-row-toggle">
                                     <input
-                                        type="checkbox"
-                                        id="badge-toggle-company"
-                                        checked
+                                        type="text"
+                                        id="badge-field-name"
+                                        class="setting-input"
+                                        placeholder="Иванов Сергей Петрович"
                                     />
-                                    <span class="slider"></span>
-                                </label>
-                            </div>
-                            <div class="setting-row-toggle">
-                                <input
-                                    type="text"
-                                    id="badge-field-position"
-                                    class="setting-input"
-                                    placeholder="Ведущий инженер"
-                                />
-                                <label class="toggle-switch small">
+                                    <label class="toggle-switch small">
+                                        <input
+                                            type="checkbox"
+                                            id="badge-toggle-name"
+                                            checked
+                                        />
+                                        <span class="slider"></span>
+                                    </label>
+                                </div>
+                                <div class="setting-row-toggle">
                                     <input
-                                        type="checkbox"
-                                        id="badge-toggle-position"
+                                        type="text"
+                                        id="badge-field-company"
+                                        class="setting-input"
+                                        placeholder="ООО «Рога и Копыта»"
                                     />
-                                    <span class="slider"></span>
-                                </label>
-                            </div>
-                            <div class="setting-row-toggle">
-                                <input
-                                    type="text"
-                                    id="badge-field-department"
-                                    class="setting-input"
-                                    placeholder="Департамент КЗ"
-                                />
-                                <label class="toggle-switch small">
+                                    <label class="toggle-switch small">
+                                        <input
+                                            type="checkbox"
+                                            id="badge-toggle-company"
+                                            checked
+                                        />
+                                        <span class="slider"></span>
+                                    </label>
+                                </div>
+                                <div class="setting-row-toggle">
                                     <input
-                                        type="checkbox"
-                                        id="badge-toggle-department"
+                                        type="text"
+                                        id="badge-field-position"
+                                        class="setting-input"
+                                        placeholder="Ведущий инженер"
                                     />
-                                    <span class="slider"></span>
-                                </label>
-                            </div>
-                            <div class="setting-row-toggle">
-                                <input
-                                    type="text"
-                                    id="badge-field-location"
-                                    class="setting-input"
-                                    placeholder="Новосибирск, Технопарк"
-                                />
-                                <label class="toggle-switch small">
+                                    <label class="toggle-switch small">
+                                        <input
+                                            type="checkbox"
+                                            id="badge-toggle-position"
+                                        />
+                                        <span class="slider"></span>
+                                    </label>
+                                </div>
+                                <div class="setting-row-toggle">
                                     <input
-                                        type="checkbox"
-                                        id="badge-toggle-location"
+                                        type="text"
+                                        id="badge-field-department"
+                                        class="setting-input"
+                                        placeholder="Департамент КЗ"
                                     />
-                                    <span class="slider"></span>
-                                </label>
-                            </div>
-                            <div class="setting-row-toggle">
-                                <input
-                                    type="text"
-                                    id="badge-field-telegram"
-                                    class="setting-input"
-                                    placeholder="@username"
-                                />
-                                <label class="toggle-switch small">
+                                    <label class="toggle-switch small">
+                                        <input
+                                            type="checkbox"
+                                            id="badge-toggle-department"
+                                        />
+                                        <span class="slider"></span>
+                                    </label>
+                                </div>
+                                <div class="setting-row-toggle">
                                     <input
-                                        type="checkbox"
-                                        id="badge-toggle-telegram"
+                                        type="text"
+                                        id="badge-field-location"
+                                        class="setting-input"
+                                        placeholder="Новосибирск, Технопарк"
                                     />
-                                    <span class="slider"></span>
-                                </label>
-                            </div>
-                            <div class="setting-row-toggle">
-                                <input
-                                    type="text"
-                                    id="badge-field-email"
-                                    class="setting-input"
-                                    placeholder="user@example.com"
-                                />
-                                <label class="toggle-switch small">
+                                    <label class="toggle-switch small">
+                                        <input
+                                            type="checkbox"
+                                            id="badge-toggle-location"
+                                        />
+                                        <span class="slider"></span>
+                                    </label>
+                                </div>
+                                <div class="setting-row-toggle">
                                     <input
-                                        type="checkbox"
-                                        id="badge-toggle-email"
+                                        type="text"
+                                        id="badge-field-telegram"
+                                        class="setting-input"
+                                        placeholder="@username"
                                     />
-                                    <span class="slider"></span>
-                                </label>
-                            </div>
-                            <div class="setting-row-toggle">
-                                <input
-                                    type="text"
-                                    id="badge-field-slogan"
-                                    class="setting-input"
-                                    placeholder="Инновации в каждый кадр"
-                                />
-                                <label class="toggle-switch small">
+                                    <label class="toggle-switch small">
+                                        <input
+                                            type="checkbox"
+                                            id="badge-toggle-telegram"
+                                        />
+                                        <span class="slider"></span>
+                                    </label>
+                                </div>
+                                <div class="setting-row-toggle">
                                     <input
-                                        type="checkbox"
-                                        id="badge-toggle-slogan"
+                                        type="text"
+                                        id="badge-field-email"
+                                        class="setting-input"
+                                        placeholder="user@example.com"
                                     />
-                                    <span class="slider"></span>
-                                </label>
+                                    <label class="toggle-switch small">
+                                        <input
+                                            type="checkbox"
+                                            id="badge-toggle-email"
+                                        />
+                                        <span class="slider"></span>
+                                    </label>
+                                </div>
+                                <div class="setting-row-toggle">
+                                    <input
+                                        type="text"
+                                        id="badge-field-slogan"
+                                        class="setting-input"
+                                        placeholder="Инновации в каждый кадр"
+                                    />
+                                    <label class="toggle-switch small">
+                                        <input
+                                            type="checkbox"
+                                            id="badge-toggle-slogan"
+                                        />
+                                        <span class="slider"></span>
+                                    </label>
+                                </div>
                             </div>
                         </div>
                     </div>
