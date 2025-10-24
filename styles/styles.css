@@ -751,3 +751,47 @@ input:checked + .slider:before {
 .hidden {
     display: none !important;
 }
+/* Контейнер для текстового поля и палитры */
+.setting-row-toggle.colors {
+    gap: 8px; /* Уменьшим отступ */
+}
+
+/* Текстовое поле для цвета */
+.color-text-input {
+    flex-grow: 1; /* Занимает основное место */
+    min-width: 50px;
+    font-family: monospace; /* Моноширинный шрифт для HEX */
+}
+
+/* Сама кнопка-палитра (input type="color") */
+.setting-color-picker {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+
+    /* Размер делаем под высоту инпута (34px) */
+    width: 34px;
+    height: 34px;
+
+    border: none;
+    border-radius: 6px; /* Скругление как у .setting-input */
+    padding: 0;
+    cursor: pointer;
+    flex-shrink: 0; /* Не сжиматься */
+    background-color: transparent;
+}
+
+/* Внутренняя часть в Chrome/Edge */
+.setting-color-picker::-webkit-color-swatch-wrapper {
+    padding: 0;
+}
+.setting-color-picker::-webkit-color-swatch {
+    border: 1px solid rgba(255, 255, 255, 0.1); /* Рамка как у .setting-input */
+    border-radius: 5px; /* Скругление чуть меньше */
+}
+
+/* Внутренняя часть в Firefox */
+.setting-color-picker::-moz-color-swatch {
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 5px;
+}

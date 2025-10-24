@@ -49,13 +49,25 @@ const els = {
 
     positionRadios: document.querySelectorAll('input[name="badge-position"]'),
     logoTypeRadios: document.querySelectorAll('input[name="badge-logo-type"]'),
+
     logoUrl: document.getElementById("badge-logo-url"),
     logoUpload: document.getElementById("badge-logo-upload"),
     logoWarning: document.getElementById("badge-logo-warning"),
-    colorPrimary: document.getElementById("badge-color-primary"),
-    colorSecondary: document.getElementById("badge-color-secondary"), // Поля ввода
 
+    // === ИЗМЕНЕНО: Ссылки на элементы выбора цвета ===
+    // Старые colorPrimary/Secondary теперь указывают на ТЕКСТОВЫЕ поля
+    colorPrimary: document.getElementById("badge-field-color-primary"),
+    colorSecondary: document.getElementById("badge-field-color-secondary"),
+    // Новые элементы для самих палитр
+    pickerColorPrimary: document.getElementById("badge-picker-color-primary"),
+    pickerColorSecondary: document.getElementById(
+      "badge-picker-color-secondary",
+    ),
+    // === КОНЕЦ ИЗМЕНЕНИЯ ===
+
+    // Поля ввода
     fieldName: document.getElementById("badge-field-name"),
+
     fieldCompany: document.getElementById("badge-field-company"),
     fieldPosition: document.getElementById("badge-field-position"),
     fieldDepartment: document.getElementById("badge-field-department"),
@@ -633,12 +645,10 @@ function handleLogoUpload(event) {
  * Загружает настройки бейджа из localStorage при запуске
  */
 function loadBadgeSettings() {
-  const b = els.badge; //
-  // === ИСПРАВЛЕНИЕ 5 (КЛЮЧЕВОЕ) ===
-  //
+  const b = els.badge;
   const defaults = {
     show: false,
-    badgePosition: "pos-bottom-left", // <--- ИЗМЕНЕНО (было 'position')
+    badgePosition: "pos-bottom-left",
     logoType: "url",
     logoUrl: "",
     logoDataUrl: "",
@@ -646,7 +656,7 @@ function loadBadgeSettings() {
     colorSecondary: "#00B8D9",
     name: "Иванов Сергей",
     company: "ООО «Рога и Копыта»",
-    jobPosition: "", // <--- ИЗМЕНЕНО (было 'position')
+    jobPosition: "",
     department: "",
     location: "",
     telegram: "",
@@ -665,20 +675,16 @@ function loadBadgeSettings() {
   try {
     const storedSettings = localStorage.getItem("badgeSettings");
     if (storedSettings && typeof storedSettings === "string") {
-      //
-      // === ИСПРАВЛЕНИЕ 6 ===
-      //
       const parsed = JSON.parse(storedSettings);
       if (
-        !parsed.badgePosition || // <--- ИЗМЕНЕНО
-        typeof parsed.badgePosition !== "string" || // <--- ИЗМЕНЕНО
+        !parsed.badgePosition ||
+        typeof parsed.badgePosition !== "string" ||
         !parsed.badgePosition.startsWith("pos-")
       ) {
-        // <--- ИЗМЕНЕНО
         console.warn(
           "Загруженная позиция некорректна, используется дефолтная.",
         );
-        parsed.badgePosition = defaults.badgePosition; // <--- ИЗМЕНЕНО
+        parsed.badgePosition = defaults.badgePosition;
       }
       badgeSettings = { ...defaults, ...parsed };
     } else {
@@ -686,28 +692,25 @@ function loadBadgeSettings() {
     }
   } catch (e) {
     console.error("Ошибка загрузки настроек бейджа из localStorage:", e);
-    badgeSettings = { ...defaults }; // Используем дефолтные при ошибке
-  } // --- Применение настроек к элементам управления (с проверками) ---
+    badgeSettings = { ...defaults };
+  }
 
-  if (b.toggleShow) b.toggleShow.checked = badgeSettings.show; //
-  // === ИСПРАВЛЕНИЕ 7 ===
-  //
-  // Установка радио-кнопки позиции
+  if (b.toggleShow) b.toggleShow.checked = badgeSettings.show;
 
   const currentPositionRadio = document.querySelector(
-    `input[name="badge-position"][value="${badgeSettings.badgePosition}"]`, // <--- ИЗМЕНЕНО
+    `input[name="badge-position"][value="${badgeSettings.badgePosition}"]`,
   );
   if (currentPositionRadio) {
     currentPositionRadio.checked = true;
   } else {
     console.warn(
-      `Не найдена радио-кнопка для позиции '${badgeSettings.badgePosition}', устанавливается дефолтная.`, // <--- ИЗМЕНЕНО
+      `Не найдена радио-кнопка для позиции '${badgeSettings.badgePosition}', устанавливается дефолтная.`,
     );
     const defaultPositionRadio = document.querySelector(
-      `input[name="badge-position"][value="${defaults.badgePosition}"]`, // <--- ИЗМЕНЕНО
+      `input[name="badge-position"][value="${defaults.badgePosition}"]`,
     );
     if (defaultPositionRadio) defaultPositionRadio.checked = true;
-  } // Установка радио-кнопки типа лого
+  }
 
   const currentLogoTypeRadio = document.querySelector(
     `input[name="badge-logo-type"][value="${badgeSettings.logoType}"]`,
@@ -722,14 +725,22 @@ function loadBadgeSettings() {
   }
 
   if (b.logoUrl) b.logoUrl.value = badgeSettings.logoUrl;
+
+  // Обновляем ТЕКСТОВОЕ ПОЛЕ для Фона
   if (b.colorPrimary) b.colorPrimary.value = badgeSettings.colorPrimary;
-  if (b.colorSecondary) b.colorSecondary.value = badgeSettings.colorSecondary; //
-  // === ИСПРАВЛЕНИЕ 8 ===
-  //
+  // Обновляем ПАЛИТРУ для Фона
+  if (b.pickerColorPrimary)
+    b.pickerColorPrimary.value = badgeSettings.colorPrimary;
+
+  // Обновляем ТЕКСТОВОЕ ПОЛЕ для Акцента
+  if (b.colorSecondary) b.colorSecondary.value = badgeSettings.colorSecondary;
+  // Обновляем ПАЛИТРУ для Акцента
+  if (b.pickerColorSecondary)
+    b.pickerColorSecondary.value = badgeSettings.colorSecondary;
 
   if (b.fieldName) b.fieldName.value = badgeSettings.name;
   if (b.fieldCompany) b.fieldCompany.value = badgeSettings.company;
-  if (b.fieldPosition) b.fieldPosition.value = badgeSettings.jobPosition; // <--- ИЗМЕНЕНО
+  if (b.fieldPosition) b.fieldPosition.value = badgeSettings.jobPosition;
   if (b.fieldDepartment) b.fieldDepartment.value = badgeSettings.department;
   if (b.fieldLocation) b.fieldLocation.value = badgeSettings.location;
   if (b.fieldTelegram) b.fieldTelegram.value = badgeSettings.telegram;
@@ -744,7 +755,7 @@ function loadBadgeSettings() {
   if (b.toggleLocation) b.toggleLocation.checked = badgeSettings.showLocation;
   if (b.toggleTelegram) b.toggleTelegram.checked = badgeSettings.showTelegram;
   if (b.toggleEmail) b.toggleEmail.checked = badgeSettings.showEmail;
-  if (b.toggleSlogan) b.toggleSlogan.checked = badgeSettings.showSlogan; // Скрываем/показываем инпуты лого (с проверками)
+  if (b.toggleSlogan) b.toggleSlogan.checked = badgeSettings.showSlogan;
 
   if (b.logoUrl && b.logoUpload) {
     if (badgeSettings.logoType === "url") {
@@ -753,16 +764,14 @@ function loadBadgeSettings() {
     } else {
       b.logoUrl.classList.add("hidden");
       b.logoUpload.classList.remove("hidden");
-    }
-  } // Очистим предупреждение при загрузке
+    } // <--- ВОТ ЗДЕСЬ БЫЛА ОПЕЧАТКА "D"
+  }
 
-  if (b.logoWarning) b.logoWarning.textContent = ""; // Рендерим бейдж с загруженными настройками
+  if (b.logoWarning) b.logoWarning.textContent = "";
 
   renderBadge();
 
-  // === ДОБАВЛЕНО: Устанавливаем начальную видимость ===
   toggleBadgeSettingsVisibility();
-  // === КОНЕЦ ДОБАВЛЕНИЯ ===
 }
 
 // ==== Initialization and Event Listeners ====
@@ -832,12 +841,12 @@ async function init() {
   if (els.camSelect)
     els.camSelect.addEventListener("change", handleVideoSettingsChange); // === УСТАНОВКА ОБРАБОТЧИКОВ ДЛЯ БЕЙДЖА ===
   // Массив текстовых инпутов, чекбоксов и колор-пикеров
-
+  // === ИЗМЕНЕНИЕ 1: Я УБРАЛ ОТСЮДА colorPrimary и colorSecondary ===
   const directUpdateControls = [
     els.badge.toggleShow,
     els.badge.logoUrl,
-    els.badge.colorPrimary,
-    els.badge.colorSecondary,
+    // els.badge.colorPrimary,   <-- УБРАНО
+    // els.badge.colorSecondary, <-- УБРАНО
     els.badge.fieldName,
     els.badge.fieldCompany,
     els.badge.fieldPosition,
@@ -897,6 +906,49 @@ async function init() {
   if (els.badge.logoUpload) {
     els.badge.logoUpload.addEventListener("change", handleLogoUpload);
   }
+
+  // === ИЗМЕНЕНИЕ 2: ВОТ ЭТОТ КОД ДОБАВЛЕН ===
+  // === ОН СВЯЗЫВАЕТ ПАЛИТРУ И ПОЛЕ ===
+
+  /**
+   * Вспомогательная функция для синхронизации текстового поля и палитры
+   * @param {HTMLInputElement} textField - Текстовое поле (input type="text")
+   * @param {HTMLInputElement} colorPicker - Палитра (input type="color")
+   */
+  function syncColorInputs(textField, colorPicker) {
+    if (!textField || !colorPicker) return; // Проверка
+
+    // 1. При вводе в ТЕКСТОВОЕ ПОЛЕ
+    textField.addEventListener("input", (e) => {
+      const newColor = e.target.value;
+      // Пытаемся применить цвет к палитре.
+      // Браузер сам проверит, валидный ли это HEX.
+      try {
+        colorPicker.value = newColor;
+      } catch (err) {
+        // Игнорируем ошибку, если введен невалидный HEX
+      }
+
+      // Вызываем главный обработчик, чтобы бейдж обновился в реальном времени
+      handleBadgeSettingChange();
+    });
+
+    // 2. При выборе в ПАЛИТРЕ
+    colorPicker.addEventListener("input", (e) => {
+      const newColor = e.target.value.toUpperCase();
+      // Обновляем текстовое поле
+      textField.value = newColor;
+
+      // Вызываем главный обработчик для обновления бейджа
+      handleBadgeSettingChange();
+    });
+  }
+
+  // Синхронизируем обе пары
+  syncColorInputs(els.badge.colorPrimary, els.badge.pickerColorPrimary);
+  syncColorInputs(els.badge.colorSecondary, els.badge.pickerColorSecondary);
+
+  // === КОНЕЦ ИЗМЕНЕНИЯ 2 ===
 }
 
 // Запуск

@@ -270,21 +270,41 @@
 
                             <div class="setting-group">
                                 <label class="group-label">Цвета</label>
-                                <div class="setting-row colors">
-                                    <label for="badge-color-primary"
+
+                                <div class="setting-row-toggle colors">
+                                    <label for="badge-field-color-primary"
                                         >Фон:</label
                                     >
                                     <input
-                                        type="color"
-                                        id="badge-color-primary"
+                                        type="text"
+                                        id="badge-field-color-primary"
+                                        class="setting-input color-text-input"
+                                        placeholder="#0052CC"
                                         value="#0052CC"
                                     />
-                                    <label for="badge-color-secondary"
+                                    <input
+                                        type="color"
+                                        id="badge-picker-color-primary"
+                                        class="setting-color-picker"
+                                        value="#0052CC"
+                                    />
+                                </div>
+
+                                <div class="setting-row-toggle colors">
+                                    <label for="badge-field-color-secondary"
                                         >Акцент:</label
                                     >
                                     <input
+                                        type="text"
+                                        id="badge-field-color-secondary"
+                                        class="setting-input color-text-input"
+                                        placeholder="#00B8D9"
+                                        value="#00B8D9"
+                                    />
+                                    <input
                                         type="color"
-                                        id="badge-color-secondary"
+                                        id="badge-picker-color-secondary"
+                                        class="setting-color-picker"
                                         value="#00B8D9"
                                     />
                                 </div>
