@@ -25,7 +25,6 @@ async function init() {
   bindBadgeControls();
 
   // 3) Модель — грузим/прогреваем заранее (параллельно остальному)
-  //    Важно: backend уже выбран и инициализирован выше
   engine.load("/models/yolo11m-seg_web_model_tfjs/model.json").catch((e) =>
     console.error("Model load error:", e)
   );
@@ -42,8 +41,7 @@ async function init() {
     if (running) {
       stopCamera();
       (window as any)._running = false;
-      // очистим оверлей при остановке
-      engine.clearOverlay();
+      engine.clearOverlay(); // очистим оверлей при остановке
     } else {
       startCamera();
       (window as any)._running = true;

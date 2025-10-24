@@ -59,13 +59,13 @@ export function startLoop(): void {
         }
       }
 
-      // === ДОБАВЛЕНО: инференс сегментации и рисование оверлея ===
+      // инференс сегментации и рисование оверлея
       try {
         if (engine.isReady && idx % INFER_EVERY === 0) {
           await engine.inferAndOverlay(els.video);
         }
       } catch {
-        // не ломаем цикл отрисовки
+        // мягкая деградация
       }
 
       // метрики

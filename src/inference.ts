@@ -6,6 +6,10 @@ type MaybeTensor = Tensor | Tensor[];
 
 /**
  * Движок сегментации: загрузка, warmup и инференс маски с наложением RGBA-оверлея.
+ * Главное:
+ *  - никаких await/Promise внутри tf.tidy()
+ *  - для статического графа используем model.execute()
+ *  - fallback на model.executeAsync() с явным dispose выходов
  */
 class SegmentationEngine {
   private model: GraphModel | null = null;
@@ -20,6 +24,7 @@ class SegmentationEngine {
   private alpha = 0.45;
 
   constructor() {
+    // создаём канвас-оверлей поверх <video>
     this.overlayCanvas = document.createElement("canvas");
     const parent = els.video.parentElement as HTMLElement; // .main-video-pane
     this.overlayCanvas.style.position = "absolute";
@@ -43,7 +48,7 @@ class SegmentationEngine {
   async load(url = "/models/yolo11m-seg_web_model_tfjs/model.json") {
     if (this.loaded) return;
 
-    // Доп. защита: удостоверимся, что TFJS готов (на случай прямого вызова)
+    // гарантируем, что выбранный бэкенд готов
     await tf.ready();
 
     this.model = await tf.loadGraphModel(url);
@@ -51,12 +56,18 @@ class SegmentationEngine {
     this.inputH = Number(inShape?.[1] ?? 640);
     this.inputW = Number(inShape?.[2] ?? 640);
 
-    // warmup под активный бэкенд
-    const warm = tf.tidy(() =>
+    // warmup: СИНХРОННО через execute (без async/await внутри tidy)
+    const dummy = tf.tidy(() =>
       tf.zeros([1, this.inputH, this.inputW, 3], "float32")
     );
-    await this.model.executeAsync(warm as Tensor4D);
-    warm.dispose();
+    try {
+      this.model.execute(dummy as Tensor4D); // если граф статический, этого достаточно
+    } catch {
+      // если модель требует async-выполнения (редкие случаи) — один раз выполним вне tidy
+      await this.model.executeAsync(dummy as Tensor4D);
+    } finally {
+      dummy.dispose();
+    }
 
     this.loaded = true;
     this.resizeOverlayToVideo();
@@ -73,6 +84,9 @@ class SegmentationEngine {
     }
   }
 
+  /**
+   * Выбор тензора маски из выходов модели: допускаем [1,h,w,1] | [h,w,1] | [1,h,w] | [h,w].
+   */
   private pickMaskTensor(out: MaybeTensor): Tensor3D {
     const isCandidate = (t: Tensor) => {
       const r = t.rank;
@@ -106,6 +120,10 @@ class SegmentationEngine {
     return mask as Tensor3D;
   }
 
+  /**
+   * Инференс + отрисовка RGBA-оверлея на canvas.
+   * Важно: ни одного await внутри tf.tidy().
+   */
   async inferAndOverlay(video: HTMLVideoElement) {
     if (!this.loaded || this.busy) return;
     if (video.readyState < 2) return;
@@ -116,38 +134,83 @@ class SegmentationEngine {
 
     this.busy = true;
     try {
-      const rgba = await tf.tidy(async () => {
-        const frame = tf.browser.fromPixels(video);
-        const resized = tf.image
-          .resizeBilinear(frame, [this.inputH, this.inputW], true)
-          .toFloat()
-          .mul(1 / 255)
-          .expandDims(0) as Tensor4D;
+      // ВАРИАНТ 1 — синхронный путь (предпочтительный и быстрый)
+      let rgba: Tensor3D | null = null;
+      let syncOk = true;
 
-        const rawOut = (await this.model!.executeAsync(resized)) as MaybeTensor;
+      try {
+        rgba = tf.tidy(() => {
+          const frame = tf.browser.fromPixels(video);
+          const input = tf.image
+            .resizeBilinear(frame, [this.inputH, this.inputW], true)
+            .toFloat()
+            .mul(1 / 255)
+            .expandDims(0) as Tensor4D;
 
-        let mask = this.pickMaskTensor(rawOut); // [h,w,1]
-        // Если модель возвращает логиты: раскомментируйте строку снизу.
-        // mask = tf.sigmoid(mask) as Tensor3D;
+          const out = this.model!.execute(input) as Tensor | Tensor[];
+          let mask = this.pickMaskTensor(out); // [h,w,1]
+          // Если модель возвращает логиты, можно включить сигмоиду:
+          // mask = tf.sigmoid(mask) as Tensor3D;
 
-        const binary = mask.greater(this.thresh).toFloat();
-        const inverted = tf.sub(1, binary);
+          const binary = mask.greater(this.thresh).toFloat();
+          const inverted = tf.sub(1, binary);
+          const up = tf.image.resizeNearestNeighbor(
+            inverted as Tensor3D,
+            [outH, outW],
+            true
+          );
+          const a = (up as Tensor3D).mul(this.alpha);
+          const z = tf.zerosLike(a);
+          const o = tf.onesLike(a);
+          return tf.concat([z, o, z, a], 2) as Tensor3D; // RGBA
+        });
+      } catch {
+        syncOk = false;
+      }
 
-        const up = tf.image.resizeNearestNeighbor(
-          inverted as Tensor3D,
-          [outH, outW],
-          true
-        ); // [H,W,1], 0..1
+      // ВАРИАНТ 2 — fallback на async-граф (await ВНЕ tidy)
+      if (!syncOk) {
+        const input = tf.tidy(() => {
+          const f = tf.browser.fromPixels(video);
+          return tf.image
+            .resizeBilinear(f, [this.inputH, this.inputW], true)
+            .toFloat()
+            .mul(1 / 255)
+            .expandDims(0) as Tensor4D;
+        });
 
-        const a = (up as Tensor3D).mul(this.alpha);
-        const z = tf.zerosLike(a);
-        const o = tf.onesLike(a);
-        const rgba = tf.concat([z, o, z, a], 2); // [H,W,4]
-        return rgba as Tensor3D;
-      });
+        const out = await this.model!.executeAsync(input);
+        input.dispose();
 
-      await tf.browser.toPixels(rgba, this.overlayCanvas);
-      rgba.dispose();
+        const outArr = Array.isArray(out) ? out : [out];
+
+        const rgbaAsync = tf.tidy(() => {
+          // используем выходы, созданные ВНЕ tidy — tidy их не удалит,
+          // поэтому ниже вручную вызовем dispose для outArr
+          let mask = this.pickMaskTensor(Array.isArray(out) ? out : outArr);
+          // mask = tf.sigmoid(mask) as Tensor3D; // если нужно
+          const binary = mask.greater(this.thresh).toFloat();
+          const inverted = tf.sub(1, binary);
+          const up = tf.image.resizeNearestNeighbor(
+            inverted as Tensor3D,
+            [outH, outW],
+            true
+          );
+          const a = (up as Tensor3D).mul(this.alpha);
+          const z = tf.zerosLike(a);
+          const o = tf.onesLike(a);
+          return tf.concat([z, o, z, a], 2) as Tensor3D;
+        });
+
+        // ручной dispose выходов async-выполнения
+        outArr.forEach(t => t.dispose());
+        rgba = rgbaAsync;
+      }
+
+      if (rgba) {
+        await tf.browser.toPixels(rgba, this.overlayCanvas);
+        rgba.dispose();
+      }
     } catch {
       // пропускаем кадр без падения
     } finally {
