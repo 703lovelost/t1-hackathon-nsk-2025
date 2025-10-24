@@ -10,8 +10,8 @@ function App() {
   return (
     <div className="App">
       <header className="App-header">
-        <h1>BlurryCam Demo</h1>
-        <button
+        <h1>Тест маскирования</h1>
+        {/* <button
           onClick={() => setUseYolo(!useYolo)}
           style={{
             padding: '12px 24px',
@@ -25,9 +25,9 @@ function App() {
           }}
         >
           {useYolo ? 'Переключиться на MediaPipe' : 'Использовать YOLO11m-seg'}
-        </button>
+        </button> */}
 
-        {useYolo ? <Yolo11SegDemo /> : <BlurryCamDemo />}
+        <Yolo11SegDemo />
       </header>
     </div>
   );
