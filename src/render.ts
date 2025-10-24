@@ -1,6 +1,14 @@
 import * as tf from "@tensorflow/tfjs";
 import { els } from "./dom";
-import { MAX_SAMPLES, fpsSamples, cpuSamples, gpuSamples, lastTs, setLastTs, running, incFrame } from "./state";
+import {
+  MAX_SAMPLES,
+  fpsSamples,
+  cpuSamples,
+  gpuSamples,
+  lastTs,
+  setLastTs,
+} from "./state";
+import { engine } from "./inference";
 
 function clamp01(x: number) { return Math.max(0, Math.min(1, x)); }
 function avg(arr: number[]) { return arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : NaN; }
@@ -24,12 +32,15 @@ async function gpuProbe(dtMs: number): Promise<{ gpuMs: number; gpuUtil: number 
 }
 
 export function startLoop(): void {
-  const hasRVFC = typeof HTMLVideoElement !== "undefined" && "requestVideoFrameCallback" in HTMLVideoElement.prototype;
+  const hasRVFC =
+    typeof HTMLVideoElement !== "undefined" &&
+    "requestVideoFrameCallback" in HTMLVideoElement.prototype;
+
   const GPU_PROBE_EVERY = 15;
+  const INFER_EVERY = 2; // инференс реже кадров — меньше latency/нагрузка
 
   const render = async () => {
-    if (!((window as any).___running ?? true)) {/* no-op */}
-    if (!document.body) return; // крайний случай
+    if (!document.body) return;
 
     if (els.video && els.video.readyState >= 2) {
       const frameStart = performance.now();
@@ -37,26 +48,43 @@ export function startLoop(): void {
 
       const now = performance.now();
       const dtMs = now - lastTs;
-      if ((window as any)._frameIdx % GPU_PROBE_EVERY === 0) {
+
+      // периодически оцениваем загрузку GPU
+      const idx = (window as any)._frameIdx || 0;
+      if (idx % GPU_PROBE_EVERY === 0) {
         const res = await gpuProbe(dtMs);
-        if (res) { gpuUtilNow = res.gpuUtil; pushSample(gpuSamples, gpuUtilNow); }
+        if (res) {
+          gpuUtilNow = res.gpuUtil;
+          pushSample(gpuSamples, gpuUtilNow);
+        }
       }
 
+      // === ДОБАВЛЕНО: инференс сегментации и рисование оверлея ===
+      try {
+        if (engine.isReady && idx % INFER_EVERY === 0) {
+          await engine.inferAndOverlay(els.video);
+        }
+      } catch {
+        // не ломаем цикл отрисовки
+      }
+
+      // метрики
       const afterDraw = performance.now();
       const dt = afterDraw - lastTs;
       const busy = afterDraw - frameStart;
       const fps = 1000 / Math.max(1, dt);
       const cpu = clamp01(busy / Math.max(1, dt)) * 100;
+
       pushSample(fpsSamples, fps);
       pushSample(cpuSamples, cpu);
 
-      els.fpsNow.textContent = `FPS: ${fmtNum(fps)} fps`;
-      els.fpsAvg.textContent = `FPSAvg: ${fmtNum(avg(fpsSamples))} fps`;
-      els.cpuNow.textContent = `CPU: ${fmtNum(cpu)}%`;
-      els.cpuAvg.textContent = `CPUAvg: ${fmtNum(avg(cpuSamples))}%`;
+      els.fpsNow.textContent  = `FPS: ${fmtNum(fps)} fps`;
+      els.fpsAvg.textContent  = `FPSAvg: ${fmtNum(avg(fpsSamples))} fps`;
+      els.cpuNow.textContent  = `CPU: ${fmtNum(cpu)}%`;
+      els.cpuAvg.textContent  = `CPUAvg: ${fmtNum(avg(cpuSamples))}%`;
       if (gpuUtilNow != null) els.gpuNow.textContent = `GPU: ${fmtNum(gpuUtilNow)}%`;
       const gAvg = avg(gpuSamples);
-      els.gpuAvg.textContent = `GPUAvg: ${Number.isFinite(gAvg) ? fmtNum(gAvg) + "%" : "-%"}`;
+      els.gpuAvg.textContent  = `GPUAvg: ${Number.isFinite(gAvg) ? fmtNum(gAvg) + "%" : "-%"}`;
 
       setLastTs(afterDraw);
       (window as any)._frameIdx = ((window as any)._frameIdx || 0) + 1;

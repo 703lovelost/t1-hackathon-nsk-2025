@@ -2,107 +2,84 @@ import { els } from "./dom";
 import { bindModal, setStatus } from "./modal";
 import { listCameras, startCamera, stopCamera } from "./camera";
 import { bindBadgeControls, loadBadgeSettings } from "./badge";
+import { engine } from "./inference";
+import { pickBestBackend } from "./backend";
 
-import type { SegmentationRunner } from "./segmentation/runner";
-import { OnnxSegmentationRunner } from "./segmentation/onnxRunner";
-import { TFLiteSegmentationRunner } from "./segmentation/tfliteRunner";
-import { attachMaskOverlay } from "./overlay";
-
+/**
+ * Точка входа приложения.
+ * Порядок:
+ * 1) Инициализация TFJS-бэкенда (WebGPU → WASM → WebGL → CPU)
+ * 2) Загрузка настроек бейджа и биндинг контролов
+ * 3) Параллельная загрузка модели сегментации
+ * 4) Инициализация камер и обработчиков devicechange
+ * 5) UI/модалка/хоткеи
+ * 6) Грейсфул остановка камеры при уходе со страницы
+ */
 async function init() {
+  // 1) Гарантируем готовность TFJS-бэкенда до любых операций с моделью
+  const backend = await pickBestBackend();
+  console.log("[TFJS] backend:", backend);
+
+  // 2) Бейдж: загрузка настроек и биндинг контролов
   loadBadgeSettings();
   bindBadgeControls();
 
+  // 3) Модель — грузим/прогреваем заранее (параллельно остальному)
+  //    Важно: backend уже выбран и инициализирован выше
+  engine.load("/models/yolo11m-seg_web_model_tfjs/model.json").catch((e) =>
+    console.error("Model load error:", e)
+  );
+
+  // 4) Камеры
   await listCameras();
-  navigator.mediaDevices?.addEventListener?.("devicechange", listCameras);
-
-  // ==== СЕГМЕНТАЦИЯ (инициализация) ====
-  const segBack = (new URLSearchParams(location.search).get("seg") || "auto") as "auto" | "onnx" | "tflite";
-  let runner: SegmentationRunner | null = null;
-  // Пробуем ONNX WebGPU (лучший вариант), затем TFLite
-  try {
-    if (segBack === "auto" || segBack === "onnx") {
-      if (!("gpu" in navigator)) throw new Error("WebGPU недоступен");
-      runner = new OnnxSegmentationRunner("/models/yolo.onnx", { inputSize: 640, threshold: 0.5 });
-      await runner.init();
-      console.log("[seg] ONNX WebGPU готов");
-    }
-  } catch (e) {
-    console.warn("[seg] ONNX WebGPU не инициализировался:", e);
-    runner = null;
-  }
-  if (!runner && (segBack === "auto" || segBack === "tflite")) {
-    try {
-      runner = new TFLiteSegmentationRunner("/models/yolo.tflite", { inputSize: 640, threshold: 0.5 });
-      await runner.init();
-      console.log("[seg] tfjs-tflite (WASM) готов");
-    } catch (e) {
-      console.warn("[seg] tfjs-tflite не инициализировался:", e);
-    }
+  if ((navigator.mediaDevices as any)?.addEventListener) {
+    navigator.mediaDevices.addEventListener("devicechange", listCameras);
   }
 
-  // Оверлей
-  const pane = els.video.parentElement as HTMLElement;
-  const overlay = attachMaskOverlay(pane, els.video);
-
-  // Кнопка камеры
-  els.toggleCamBtn.addEventListener("click", async () => {
+  // 5) Кнопка старта/стопа камеры
+  els.toggleCamBtn.addEventListener("click", () => {
     const running = (window as any)._running === true;
     if (running) {
       stopCamera();
       (window as any)._running = false;
+      // очистим оверлей при остановке
+      engine.clearOverlay();
     } else {
-      await startCamera();
+      startCamera();
       (window as any)._running = true;
-
-      // Тёплый прогон сегментации
-      if (runner) {
-        try { await runner.warmup?.(els.video); } catch {}
-      }
     }
   });
 
-  // Модалка и смена камеры
+  // 6) Модальное окно и табы
   bindModal();
+
+  // Перезапуск камеры при смене устройства
   const handleVideoSettingsChange = () => {
     if ((window as any)._running) {
+      console.log("Настройки видео изменились, перезапускаем камеру…");
       stopCamera();
       setTimeout(startCamera, 50);
     }
   };
   els.camSelect.addEventListener("change", handleVideoSettingsChange);
 
-  // Грейсфул стоп
+  // Хоткеи: Space — старт/стоп, Esc — закрыть модалку (если открыта)
+  window.addEventListener("keydown", (e) => {
+    if (e.code === "Space") {
+      e.preventDefault();
+      els.toggleCamBtn.click();
+    } else if (e.code === "Escape") {
+      const modal = els.settingsModal as HTMLElement;
+      if (getComputedStyle(modal).display !== "none") {
+        (document.getElementById("closeSettingsBtn") as HTMLElement)?.click();
+      }
+    }
+  });
+
+  // Грейсфул стоп камеры при уходе со страницы
   window.addEventListener("pagehide", stopCamera);
   window.addEventListener("beforeunload", stopCamera);
 
-  // ==== Цикл сегментации с троттлингом ====
-  let busy = false;
-  let lastTs = 0;
-  const TARGET_FPS = 24;
-  const MIN_DT = 1000 / TARGET_FPS;
-
-  const tick = async (ts: number) => {
-    if ((window as any)._running && runner && !busy) {
-      if (ts - lastTs >= MIN_DT) {
-        busy = true;
-        try {
-          const res = await runner.run(els.video);
-          if (res) overlay.draw(res.data, res.width, res.height);
-        } catch (e) {
-          // тихо, чтобы не заспамить
-        } finally {
-          lastTs = ts;
-          busy = false;
-        }
-      }
-    }
-    requestAnimationFrame(tick);
-  };
-  requestAnimationFrame(tick);
-
-  // Ресайз оверлея при изменении размера
-  const ro = new ResizeObserver(() => overlay.resizeToVideo());
-  ro.observe(pane);
   setStatus("готов");
 }
 
