@@ -60,6 +60,7 @@ export async function startCamera() {
       console.log('ONNX session ready:', preferOrt);
     } catch (e) {
       console.warn('ONNX init failed:', e);
+      setStatus('WebGPU для ONNX недоступен (маска выключена)', 'warn');
     }
 
     setRunning(true);

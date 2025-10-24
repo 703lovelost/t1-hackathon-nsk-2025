@@ -192,7 +192,8 @@ async function runOnce(videoEl, { mirror }) {
     if (APPLY_SIGMOID) v = sigmoid(v);
     min = Math.min(min, v); max = Math.max(max, v);
     const bin = v > 0.5 ? 1 : 0;
-    const inv = 1 - bin; // инверсия
+    // const inv = 1 - bin; // инверсия
+    const inv = bin;
     if (inv) ones++;
     const j = i * 4;
     rgbaBuffer[j+0] = 0;
