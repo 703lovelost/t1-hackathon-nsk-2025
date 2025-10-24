@@ -47,12 +47,13 @@ export async function initSegmentation({ modelUrl, preferBackend = 'webgpu' } = 
   prefer = preferBackend;
   makePreprocessCanvas(canvasW, canvasH);
 
-  if (!('gpu' in navigator) || !ort?.env?.webgpu) {
+  const ORT = globalThis.ort;
+  if (!('gpu' in navigator) || !ORT?.env?.webgpu) {
     throw new Error('WebGPU is not available.');
   }
   const sessOpts = { executionProviders: ['webgpu'] };
-  session = await ort.InferenceSession.create(modelUrl, sessOpts);
-  console.log('ORT EP picked:', session.executionProvider ?? epList[0]);
+  session = await ORT.InferenceSession.create(modelUrl, sessOpts);
+  console.log('ORT EP picked:', session.executionProvider);
 
   inputName = session.inputNames[0];
   outputName = session.outputNames[0];
@@ -61,7 +62,7 @@ export async function initSegmentation({ modelUrl, preferBackend = 'webgpu' } = 
   rgbaBuffer = new Uint8ClampedArray(canvasH * canvasW * 4);
 
   // тёплый прогон
-  const dummy = new ort.Tensor('float32', chwBuffer, [1, 3, canvasH, canvasW]);
+  const dummy = new ORT.Tensor('float32', chwBuffer, [1, 3, canvasH, canvasW]);
   await session.run({ [inputName]: dummy });
 }
 
