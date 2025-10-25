@@ -9,6 +9,8 @@ const BlurryCamDemo = () => {
   const outputCanvasRef = useRef(null);
   const rafRef = useRef(null);
   const [segmenter, setSegmenter] = useState(null);
+  const [backgroundImage, setBackgroundImage] = useState(null);
+  const backgroundRef = useRef(null);
 
   // Загрузка модели сегментации
   const loadSegmentation = async () => {
@@ -18,32 +20,61 @@ const BlurryCamDemo = () => {
     setSegmenter(seg);
   };
 
-  // Применяем маску и заменяем фон на зелёный
-  const applyMaskWithGreenBackground = (video, maskImageData, outputCanvas) => {
+  // Загрузка изображения из input
+  const handleBackgroundChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const img = new Image();
+      img.onload = () => {
+        backgroundRef.current = img;
+        setBackgroundImage(URL.createObjectURL(file));
+      };
+      img.src = URL.createObjectURL(file);
+    }
+  };
+
+  // Применение маски и вставка пользовательского фона
+  const applyMaskWithCustomBackground = (video, maskImageData, outputCanvas) => {
     const width = video.videoWidth;
     const height = video.videoHeight;
     const ctx = outputCanvas.getContext('2d');
 
     ctx.clearRect(0, 0, width, height);
-    ctx.drawImage(video, 0, 0, width, height);
-    const videoImageData = ctx.getImageData(0, 0, width, height);
-    const videoPixels = videoImageData.data;
+
+    // Сначала нарисуем фон
+    if (backgroundRef.current) {
+      ctx.drawImage(backgroundRef.current, 0, 0, width, height);
+    } else {
+      ctx.fillStyle = 'green';
+      ctx.fillRect(0, 0, width, height);
+    }
+
+    // Затем применим маску и добавим изображение с камеры поверх
+    const videoImageData = new ImageData(width, height);
+    const tempCtx = document.createElement('canvas').getContext('2d');
+    tempCtx.canvas.width = width;
+    tempCtx.canvas.height = height;
+    tempCtx.drawImage(video, 0, 0, width, height);
+    const videoPixels = tempCtx.getImageData(0, 0, width, height).data;
     const maskPixels = maskImageData.data;
 
-    for (let i = 0; i < videoPixels.length; i += 4) {
-      const maskValue = maskPixels[i];
-      if (maskValue <= 127) {
-        // фон — зелёный
-        videoPixels[i] = 0;
-        videoPixels[i + 1] = 255;
-        videoPixels[i + 2] = 0;
-        videoPixels[i + 3] = 255;
+    const outputPixels = ctx.getImageData(0, 0, width, height);
+    const outputData = outputPixels.data;
+
+    for (let i = 0; i < outputData.length; i += 4) {
+      const maskValue = maskPixels[i]; // 0 = фон, 255 = человек
+      if (maskValue > 127) {
+        outputData[i] = videoPixels[i];
+        outputData[i + 1] = videoPixels[i + 1];
+        outputData[i + 2] = videoPixels[i + 2];
+        outputData[i + 3] = 255;
       }
     }
-    ctx.putImageData(videoImageData, 0, 0);
+
+    ctx.putImageData(outputPixels, 0, 0);
   };
 
-  // Основной цикл
+  // Основной цикл обработки видео
   const processVideo = async () => {
     if (!segmenter) return;
     const video = webcamRef.current.video;
@@ -63,11 +94,15 @@ const BlurryCamDemo = () => {
         const ctx = outputCanvas.getContext('2d');
 
         if (!segmentations.length) {
-          ctx.fillStyle = 'green';
-          ctx.fillRect(0, 0, outputCanvas.width, outputCanvas.height);
+          if (backgroundRef.current) {
+            ctx.drawImage(backgroundRef.current, 0, 0, outputCanvas.width, outputCanvas.height);
+          } else {
+            ctx.fillStyle = 'green';
+            ctx.fillRect(0, 0, outputCanvas.width, outputCanvas.height);
+          }
         } else {
           const mask = await segmentations[0].mask.toImageData();
-          applyMaskWithGreenBackground(video, mask, outputCanvas);
+          applyMaskWithCustomBackground(video, mask, outputCanvas);
         }
       } catch (e) {
         console.warn('Segmentation error:', e);
@@ -78,7 +113,6 @@ const BlurryCamDemo = () => {
 
     updateCanvasLoop();
 
-    // Возврат функции очистки
     return () => {
       active = false;
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
@@ -109,14 +143,29 @@ const BlurryCamDemo = () => {
   }, [segmenter]);
 
   return (
-    <div style={{ position: 'relative', display: 'flex', justifyContent: 'center' }}>
-      <Webcam ref={webcamRef} width={640} height={480} />
-      <canvas
-        ref={outputCanvasRef}
-        width={640}
-        height={480}
-        style={{ position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)' }}
-      />
+    <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+      <div style={{ marginBottom: '16px' }}>
+        <label htmlFor="bgUpload" style={{ cursor: 'pointer', fontSize: '16px', color: '#61dafb' }}>
+          Выберите фоновое изображение:
+        </label>
+        <input id="bgUpload" type="file" accept="image/*" onChange={handleBackgroundChange} />
+      </div>
+
+      <div style={{ position: 'relative', display: 'flex', justifyContent: 'center' }}>
+        <Webcam ref={webcamRef} width={640} height={480} />
+        <canvas
+          ref={outputCanvasRef}
+          width={640}
+          height={480}
+          style={{ position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)' }}
+        />
+      </div>
+
+      {backgroundImage && (
+        <p style={{ marginTop: '10px', fontSize: '14px', color: '#ccc' }}>
+          Выбран фон: {backgroundImage.split('/').pop()}
+        </p>
+      )}
     </div>
   );
 };
