@@ -1,8 +1,8 @@
 <!-- PROJECT LOGO -->
 <br />
 <p align="center">
-  <img src="src/preview.jpg" width=200>
-  <h3 align="center">Digital Background Generator</h3>
+  <!-- <img src="src/preview.jpg" width=200> -->
+  <h3 align="center">Сегментация фона на видеопотоке</h3>
 </p>
 
 <p align="center">
@@ -13,39 +13,23 @@
   <a href=""><b>Daria Petrova</b></a> •
   <a href=""><b>Ilya Trushkin</b></a>
   <br />
-  Institute of AI Robotics
+  Институт интеллектуальной робототехники
   <br />
-  Novosibirsk State University
+  Новосибирский государственный университет
 </p>
 
-<!-- TABLE OF CONTENTS -->
-<details open="open">
-  <summary>Table of contents</summary>
-  <ol>
-    <li><a href="#About">About</a></li>
-    <li><a href="#Install">Install</a></li>
-    <li><a href="#Run">Run</a></li>
-  </ol>
-</details>
+## О проекте
 
-## About
+Сегментация фона на видеопотоке с возможностью выбора фона и стилизации персональной информации пользователя.
 
-Digital background generator.
-
-Top-1 Novosibirsk T1 Hackathon solution.
-
-## Install
+## Установка
 
 ```
-python3 ...
+npm install
 ```
 
-## Run
-
-### Web interface
-
-To run the web interface:
+## Запуск
 
 ```
-python3 -m http.server [PORT]
+npm start
 ```

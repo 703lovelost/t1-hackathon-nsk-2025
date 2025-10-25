@@ -1,4 +1,0 @@
-scipy
-ultralytics
-numpy
-opencv-python
