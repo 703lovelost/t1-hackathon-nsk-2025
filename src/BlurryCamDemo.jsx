@@ -57,7 +57,7 @@ let recentImageDataList = [];
       
       // If we have exactly 3, compute the average
       if (recentImageDataList.length === 3) {
-          return calculateAverageImageData(recentImageDataList);
+          return calculateWeightedAverageImageData(recentImageDataList);
       }
 
       const width = imageData.width;
@@ -66,7 +66,7 @@ let recentImageDataList = [];
       return new ImageData(width, height); // Return null if we don't have 3 images yet
   }
 
-  function calculateAverageImageData(imageDataArray) {
+  function calculateWeightedAverageImageData(imageDataArray) {
       // All ImageData objects should have the same dimensions
       const width = imageDataArray[0].width;
       const height = imageDataArray[0].height;
@@ -104,6 +104,209 @@ let recentImageDataList = [];
       return resultImageData;
   }
 
+  // function applyBilateralFilter(imageData, sigmaSpace = 3, sigmaColor = 0.1) {
+  //     const width = imageData.width;
+  //     const height = imageData.height;
+  //     const data = imageData.data;
+      
+  //     // Создаем новый ImageData для результата
+  //     const resultImageData = new ImageData(width, height);
+  //     const resultData = resultImageData.data;
+      
+  //     // Вычисляем радиус окна на основе sigmaSpace
+  //     const radius = Math.floor(sigmaSpace * 1.5);
+      
+  //     // Предварительно вычисляем пространственное гауссово ядро
+  //     const spatialKernel = createSpatialKernel(radius, sigmaSpace);
+      
+  //     // Копируем исходные данные (для альфа-канала и чтобы не портить исходные)
+  //     const sourceData = new Float32Array(data.length);
+  //     for (let i = 0; i < data.length; i++) {
+  //         sourceData[i] = data[i] / 255; // Нормализуем в [0, 1]
+  //         resultData[i] = data[i]; // Копируем исходные значения
+  //     }
+      
+  //     // Применяем двусторонний фильтр к каждому пикселю
+  //     for (let y = 0; y < height; y++) {
+  //         for (let x = 0; x < width; x++) {
+  //             const idx = (y * width + x) * 4;
+              
+  //             // Пропускаем полностью прозрачные пиксели
+  //             if (sourceData[idx + 3] === 0) continue;
+              
+  //             // Получаем интенсивность текущего пикселя (берем красный канал для маски)
+  //             const centerIntensity = sourceData[idx];
+              
+  //             let sumWeights = 0;
+  //             let sumValues = 0;
+              
+  //             // Проходим по окрестности
+  //             for (let dy = -radius; dy <= radius; dy++) {
+  //                 for (let dx = -radius; dx <= radius; dx++) {
+  //                     const nx = x + dx;
+  //                     const ny = y + dy;
+                      
+  //                     // Проверяем границы
+  //                     if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
+                      
+  //                     const nidx = (ny * width + nx) * 4;
+                      
+  //                     // Пропускаем полностью прозрачные пиксели
+  //                     if (sourceData[nidx + 3] === 0) continue;
+                      
+  //                     // Получаем интенсивность соседнего пикселя
+  //                     const neighborIntensity = sourceData[nidx];
+                      
+  //                     // Вычисляем пространственный вес
+  //                     const spatialWeight = spatialKernel[dy + radius][dx + radius];
+                      
+  //                     // Вычисляем цветовой вес (разность интенсивностей)
+  //                     const intensityDiff = Math.abs(centerIntensity - neighborIntensity);
+  //                     const colorWeight = Math.exp(-(intensityDiff * intensityDiff) / (2 * sigmaColor * sigmaColor));
+                      
+  //                     // Общий вес = пространственный * цветовой
+  //                     const totalWeight = spatialWeight * colorWeight;
+                      
+  //                     sumWeights += totalWeight;
+  //                     sumValues += neighborIntensity * totalWeight;
+  //                 }
+  //             }
+              
+  //             // Вычисляем отфильтрованное значение
+  //             if (sumWeights > 0) {
+  //                 const filteredIntensity = sumValues / sumWeights;
+  //                 // Записываем результат во все цветовые каналы (для градаций серого)
+  //                 const intensity = Math.round(filteredIntensity * 255);
+  //                 resultData[idx] = intensity;     // R
+  //                 resultData[idx + 1] = intensity; // G
+  //                 resultData[idx + 2] = intensity; // B
+  //                 // Alpha оставляем без изменений
+  //             }
+  //         }
+  //     }
+      
+  //     return resultImageData;
+  // }
+
+  // function createSpatialKernel(radius, sigma) {
+  //     const size = radius * 2 + 1;
+  //     const kernel = Array(size);
+  //     const sigma2 = sigma * sigma;
+      
+  //     for (let i = 0; i < size; i++) {
+  //         kernel[i] = Array(size);
+  //         for (let j = 0; j < size; j++) {
+  //             const dx = j - radius;
+  //             const dy = i - radius;
+  //             const distance2 = dx * dx + dy * dy;
+  //             kernel[i][j] = Math.exp(-distance2 / (2 * sigma2));
+  //         }
+  //     }
+      
+  //     return kernel;
+  // }
+
+  // // Оптимизированная версия для бинарных масок (только 0 и 255)
+  // function applyBilateralFilterBinary(imageData, sigmaSpace = 3, sigmaColor = 0.1) {
+  //     const width = imageData.width;
+  //     const height = imageData.height;
+  //     const data = imageData.data;
+      
+  //     const resultImageData = new ImageData(width, height);
+  //     const resultData = resultImageData.data;
+      
+  //     const radius = Math.floor(sigmaSpace * 1.5);
+  //     const spatialKernel = createSpatialKernel(radius, sigmaSpace);
+      
+  //     // Копируем исходные данные и нормализуем в [0, 1]
+  //     const sourceData = new Float32Array(width * height);
+  //     for (let y = 0; y < height; y++) {
+  //         for (let x = 0; x < width; x++) {
+  //             const idx = (y * width + x) * 4;
+  //             const maskIdx = y * width + x;
+  //             // Используем красный канал и нормализуем
+  //             sourceData[maskIdx] = data[idx] / 255;
+  //             // Копируем исходные данные
+  //             resultData[idx] = data[idx];
+  //             resultData[idx + 1] = data[idx + 1];
+  //             resultData[idx + 2] = data[idx + 2];
+  //             resultData[idx + 3] = data[idx + 3];
+  //         }
+  //     }
+      
+  //     // Применяем фильтр
+  //     for (let y = 0; y < height; y++) {
+  //         for (let x = 0; x < width; x++) {
+  //             const idx = (y * width + x) * 4;
+  //             const maskIdx = y * width + x;
+              
+  //             // Пропускаем полностью прозрачные пиксели
+  //             if (data[idx + 3] === 0) continue;
+              
+  //             const centerIntensity = sourceData[maskIdx];
+              
+  //             let sumWeights = 0;
+  //             let sumValues = 0;
+              
+  //             for (let dy = -radius; dy <= radius; dy++) {
+  //                 for (let dx = -radius; dx <= radius; dx++) {
+  //                     const nx = x + dx;
+  //                     const ny = y + dy;
+                      
+  //                     if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
+                      
+  //                     const nidx = (ny * width + nx) * 4;
+  //                     const nmaskIdx = ny * width + nx;
+                      
+  //                     if (data[nidx + 3] === 0) continue;
+                      
+  //                     const neighborIntensity = sourceData[nmaskIdx];
+  //                     const spatialWeight = spatialKernel[dy + radius][dx + radius];
+  //                     const intensityDiff = Math.abs(centerIntensity - neighborIntensity);
+  //                     const colorWeight = Math.exp(-(intensityDiff * intensityDiff) / (2 * sigmaColor * sigmaColor));
+  //                     const totalWeight = spatialWeight * colorWeight;
+                      
+  //                     sumWeights += totalWeight;
+  //                     sumValues += neighborIntensity * totalWeight;
+  //                 }
+  //             }
+              
+  //             if (sumWeights > 0) {
+  //                 const filteredIntensity = sumValues / sumWeights;
+  //                 const intensity = Math.round(filteredIntensity * 255);
+  //                 resultData[idx] = intensity;
+  //                 resultData[idx + 1] = intensity;
+  //                 resultData[idx + 2] = intensity;
+  //             }
+  //         }
+  //     }
+      
+  //     return resultImageData;
+  // }
+
+  // // Функция для последовательной обработки с сохранением последних кадров
+  // let recentSegmentationMasks = [];
+
+  // function processSegmentationMask(segmentationMask) {
+  //     // Добавляем новую маску в список
+  //     // recentSegmentationMasks.push(segmentationMask);
+      
+  //     // // Удаляем самую старую, если больше 3
+  //     // if (recentSegmentationMasks.length > 3) {
+  //     //     recentSegmentationMasks.shift();
+  //     // }
+      
+  //     // // Если накопилось 3 маски, применяем взвешенное усреднение
+  //     // if (recentSegmentationMasks.length === 3) {
+  //     //     const averagedMask = calculateWeightedAverageImageData(recentSegmentationMasks);
+  //     //     // Затем применяем двусторонний фильтр к усредненной маске
+  //     //     return applyBilateralFilter(averagedMask);
+  //     // }
+      
+  //     // Если меньше 3 масок, применяем фильтр к текущей
+  //     return applyBilateralFilter(segmentationMask);
+  // }
+
   // Основной цикл
   const processVideo = async () => {
     if (!segmenter) return;
@@ -124,6 +327,7 @@ let recentImageDataList = [];
         const ctx = outputCanvas.getContext('2d');
         const raw_mask = await segmentations[0].mask.toImageData();
         const mask = processImageData(raw_mask);
+        // const mask = processSegmentationMask(raw_mask);
 
         // var toType = function(obj) {
         //   return ({}).toString.call(obj).match(/\s([a-zA-Z]+)/)[1].toLowerCase()
