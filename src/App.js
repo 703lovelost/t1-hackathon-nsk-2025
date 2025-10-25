@@ -1,7 +1,6 @@
 // App.js
 import './App.css';
 import BlurryCamDemo from './BlurryCamDemo';
-import Yolo11SegDemo from './Yolo11SegDemo';
 import { useState } from 'react';
 
 function App() {

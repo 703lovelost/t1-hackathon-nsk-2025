@@ -302,31 +302,32 @@ export default function Yolo11SegDemo() {
   // ====== UI ======
   if (error) return <p style={{ color:'red' }}>{error}</p>;
   return (
-    <div style={{ position:'relative', display:'inline-block' }}>
-      {/* источник: вебка (скрыта визуально, но обязана играть) */}
-      <Webcam
-        ref={webcamRef}
-        audio={false}
-        muted
-        playsInline
-        onUserMedia={() => setCameraReady(true)}
-        videoConstraints={{ facingMode: 'user' }}
-        style={{ position:'absolute', opacity:0, width:1, height:1, pointerEvents:'none' }}
-      />
-      {/* результат мерджа */}
-      <video
-        ref={outVideoRef}
-        autoPlay
-        playsInline
-        muted
-        style={{
-          display:'block',
-          border:'3px solid #61dafb',
-          borderRadius:12,
-          boxShadow:'0 0 25px rgba(97,218,251,.4)',
-          width:'640px', height:'480px', background:'#000'
-        }}
-      />
-    </div>
+    <div></div>
+    // <div style={{ position:'relative', display:'inline-block' }}>
+    //   {/* источник: вебка (скрыта визуально, но обязана играть) */}
+    //   <Webcam
+    //     ref={webcamRef}
+    //     audio={false}
+    //     muted
+    //     playsInline
+    //     onUserMedia={() => setCameraReady(true)}
+    //     videoConstraints={{ facingMode: 'user' }}
+    //     style={{ position:'absolute', opacity:0, width:1, height:1, pointerEvents:'none' }}
+    //   />
+    //   {/* результат мерджа */}
+    //   <video
+    //     ref={outVideoRef}
+    //     autoPlay
+    //     playsInline
+    //     muted
+    //     style={{
+    //       display:'block',
+    //       border:'3px solid #61dafb',
+    //       borderRadius:12,
+    //       boxShadow:'0 0 25px rgba(97,218,251,.4)',
+    //       width:'640px', height:'480px', background:'#000'
+    //     }}
+    //   />
+    // </div>
   );
 }
