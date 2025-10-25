@@ -1,6 +1,5 @@
-// App.js
-import './App.css';
-import BlurryCamDemo from './BlurryCamDemo';
+import './styles/styles.css';
+import VideoConference from './components/VideoConference';
 import { useState } from 'react';
 
 function App() {
@@ -8,26 +7,10 @@ function App() {
 
   return (
     <div className="App">
-      <header className="App-header">
-        <h1>Тест маскирования</h1>
-        {/* <button
-          onClick={() => setUseYolo(!useYolo)}
-          style={{
-            padding: '12px 24px',
-            fontSize: '16px',
-            marginBottom: '20px',
-            cursor: 'pointer',
-            background: useYolo ? '#61dafb' : '#282c34',
-            color: 'white',
-            border: 'none',
-            borderRadius: '8px',
-          }}
-        >
-          {useYolo ? 'Переключиться на MediaPipe' : 'Использовать YOLO11m-seg'}
-        </button> */}
-
-        <BlurryCamDemo />
-      </header>
+      <header className="container">Camera test.</header>
+      <main className="container">
+        <VideoConference useYolo={useYolo} setUseYolo={setUseYolo} />
+      </main>
     </div>
   );
 }

@@ -25,6 +25,8 @@
 ## Установка
 
 ```
+git clone https://github.com/703lovelost/t1-hackathon-nsk-2025.git
+cd t1-hackathon-nsk-2025
 npm install
 ```
 
