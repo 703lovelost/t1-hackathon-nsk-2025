@@ -27,7 +27,7 @@ function App() {
           {useYolo ? 'Переключиться на MediaPipe' : 'Использовать YOLO11m-seg'}
         </button> */}
 
-        <Yolo11SegDemo />
+        <BlurryCamDemo />
       </header>
     </div>
   );
