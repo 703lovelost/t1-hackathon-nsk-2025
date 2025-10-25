@@ -61,14 +61,9 @@ const BlurryCamDemo = () => {
       try {
         const segmentations = await segmenter.segmentPeople(video);
         const ctx = outputCanvas.getContext('2d');
-
-        if (!segmentations.length) {
-          ctx.fillStyle = 'green';
-          ctx.fillRect(0, 0, outputCanvas.width, outputCanvas.height);
-        } else {
-          const mask = await segmentations[0].mask.toImageData();
-          applyMaskWithGreenBackground(video, mask, outputCanvas);
-        }
+        const mask = await segmentations[0].mask.toImageData();
+        applyMaskWithGreenBackground(video, mask, outputCanvas);
+        (await segmentations[0].mask.toTensor()).dispose();
       } catch (e) {
         console.warn('Segmentation error:', e);
       }
